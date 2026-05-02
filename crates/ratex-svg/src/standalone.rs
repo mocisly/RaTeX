@@ -4,75 +4,7 @@ use std::collections::HashMap;
 
 use ab_glyph::{Font, FontRef, OutlineCurve};
 use ratex_font::FontId;
-
-#[allow(unused_variables)]
-pub(crate) fn load_all_fonts(font_dir: &str) -> Result<HashMap<FontId, Vec<u8>>, String> {
-    let mut data = HashMap::new();
-    let font_map = [
-        (FontId::MainRegular, "KaTeX_Main-Regular.ttf"),
-        (FontId::MainBold, "KaTeX_Main-Bold.ttf"),
-        (FontId::MainItalic, "KaTeX_Main-Italic.ttf"),
-        (FontId::MainBoldItalic, "KaTeX_Main-BoldItalic.ttf"),
-        (FontId::MathItalic, "KaTeX_Math-Italic.ttf"),
-        (FontId::MathBoldItalic, "KaTeX_Math-BoldItalic.ttf"),
-        (FontId::AmsRegular, "KaTeX_AMS-Regular.ttf"),
-        (FontId::CaligraphicRegular, "KaTeX_Caligraphic-Regular.ttf"),
-        (FontId::FrakturRegular, "KaTeX_Fraktur-Regular.ttf"),
-        (FontId::FrakturBold, "KaTeX_Fraktur-Bold.ttf"),
-        (FontId::SansSerifRegular, "KaTeX_SansSerif-Regular.ttf"),
-        (FontId::SansSerifBold, "KaTeX_SansSerif-Bold.ttf"),
-        (FontId::SansSerifItalic, "KaTeX_SansSerif-Italic.ttf"),
-        (FontId::ScriptRegular, "KaTeX_Script-Regular.ttf"),
-        (FontId::TypewriterRegular, "KaTeX_Typewriter-Regular.ttf"),
-        (FontId::Size1Regular, "KaTeX_Size1-Regular.ttf"),
-        (FontId::Size2Regular, "KaTeX_Size2-Regular.ttf"),
-        (FontId::Size3Regular, "KaTeX_Size3-Regular.ttf"),
-        (FontId::Size4Regular, "KaTeX_Size4-Regular.ttf"),
-    ];
-
-    #[cfg(not(feature = "embed-fonts"))]
-    {
-        let dir = std::path::Path::new(font_dir);
-        for (id, filename) in &font_map {
-            let path = dir.join(filename);
-            if path.exists() {
-                let bytes = std::fs::read(&path)
-                    .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
-                data.insert(*id, bytes);
-            }
-        }
-
-        if data.is_empty() {
-            return Err(format!("No fonts found in {font_dir}"));
-        }
-    }
-
-    #[cfg(feature = "embed-fonts")]
-    {
-        for (id, filename) in &font_map {
-            let font = ratex_katex_fonts::ttf_bytes(filename)
-                .ok_or_else(|| format!("Failed to get embedded font {filename}"))?;
-            data.insert(*id, font.to_vec());
-        }
-    }
-
-    // Load system Unicode font for CJK/fallback glyphs.
-    if let Some(cjk_bytes) = ratex_unicode_font::load_unicode_font() {
-        data.entry(FontId::CjkRegular)
-            .or_insert_with(|| cjk_bytes.to_vec());
-    }
-    // Secondary system fallback for characters the primary CJK font doesn't cover.
-    if let Some(fb_bytes) = ratex_unicode_font::load_fallback_font() {
-        data.entry(FontId::CjkFallback)
-            .or_insert_with(|| fb_bytes.to_vec());
-    }
-    if let Some(emoji_bytes) = ratex_unicode_font::load_emoji_font() {
-        data.entry(FontId::EmojiFallback)
-            .or_insert_with(|| emoji_bytes.to_vec());
-    }
-
-    Ok(data)
-}
+use ratex_font_loader::FontSet;
 
 fn sfnt_collection_index(id: FontId) -> u32 {
     match id {
@@ -83,16 +15,17 @@ fn sfnt_collection_index(id: FontId) -> u32 {
     }
 }
 
-pub(crate) fn build_font_cache(
-    data: &HashMap<FontId, Vec<u8>>,
-) -> Result<HashMap<FontId, FontRef<'_>>, String> {
-    let mut cache = HashMap::new();
-    for (id, bytes) in data {
+/// Build a `FontId → FontRef` map from the cached raw data (held alive by `guard`).
+pub(crate) fn build_font_refs<'a>(
+    data: &'a FontSet,
+) -> Result<HashMap<FontId, FontRef<'a>>, String> {
+    let mut font_refs = HashMap::new();
+    for (id, bytes) in data.iter() {
         let font = FontRef::try_from_slice_and_index(bytes, sfnt_collection_index(*id))
-            .map_err(|e| format!("Failed to parse font {id:?}: {e}"))?;
-        cache.insert(*id, font);
+            .map_err(|e| format!("Failed to parse font {:?}: {}", id, e))?;
+        font_refs.insert(*id, font);
     }
-    Ok(cache)
+    Ok(font_refs)
 }
 
 /// Vector path or color-emoji raster (`sbix` PNG as `data:image/png`), matching `ratex-render::render_glyph`.
@@ -136,7 +69,7 @@ pub(crate) fn standalone_glyph(
     }
 
     if font_id == FontId::CjkRegular {
-        if let Some(d) = outline_to_d(px, py, glyph_em, font, glyph_id) {
+        if let Some(d) = outline_to_d(px, py, glyph_em, FontId::CjkRegular, font, glyph_id) {
             return Some(StandaloneGlyph::Path(d));
         }
         if let Some(g) = try_emoji_raster_then_vector_svg(px, py, glyph_em, ch, font_cache) {
@@ -145,20 +78,20 @@ pub(crate) fn standalone_glyph(
         if let Some(fb) = font_cache.get(&FontId::CjkFallback) {
             let fid = fb.glyph_id(ch);
             if fid.0 != 0 {
-                return outline_to_d(px, py, glyph_em, fb, fid).map(StandaloneGlyph::Path);
+                return outline_to_d(px, py, glyph_em, FontId::CjkFallback, fb, fid).map(StandaloneGlyph::Path);
             }
         }
         return None;
     }
 
     if font_id == FontId::CjkFallback {
-        if let Some(d) = outline_to_d(px, py, glyph_em, font, glyph_id) {
+        if let Some(d) = outline_to_d(px, py, glyph_em, FontId::CjkFallback, font, glyph_id) {
             return Some(StandaloneGlyph::Path(d));
         }
         return try_emoji_raster_then_vector_svg(px, py, glyph_em, ch, font_cache);
     }
 
-    if let Some(d) = outline_to_d(px, py, glyph_em, font, glyph_id) {
+    if let Some(d) = outline_to_d(px, py, glyph_em, font_id, font, glyph_id) {
         return Some(StandaloneGlyph::Path(d));
     }
 
@@ -181,10 +114,7 @@ fn try_emoji_png_data_url(px: f32, py: f32, em: f32, ch: char) -> Option<Standal
     y += (center_strike - axis) * em;
     let w = f32::from(strike.width) * scale;
     let h = f32::from(strike.height) * scale;
-    let href = format!(
-        "data:image/png;base64,{}",
-        STANDARD.encode(&strike.data)
-    );
+    let href = format!("data:image/png;base64,{}", STANDARD.encode(&strike.data));
     Some(StandaloneGlyph::Image { href, x, y, w, h })
 }
 
@@ -203,7 +133,7 @@ fn try_emoji_raster_then_vector_svg(
     if eid.0 == 0 {
         return None;
     }
-    outline_to_d(px, py, em, emoji_font, eid).map(StandaloneGlyph::Path)
+    outline_to_d(px, py, em, FontId::EmojiFallback, emoji_font, eid).map(StandaloneGlyph::Path)
 }
 
 fn try_emoji_raster_or_vector_svg(
@@ -217,7 +147,7 @@ fn try_emoji_raster_or_vector_svg(
     if let Some(img) = try_emoji_png_data_url(px, py, em, ch) {
         return Some(img);
     }
-    outline_to_d(px, py, em, font, glyph_id).map(StandaloneGlyph::Path)
+    outline_to_d(px, py, em, FontId::EmojiFallback, font, glyph_id).map(StandaloneGlyph::Path)
 }
 
 fn try_system_unicode_fallback_svg(
@@ -232,7 +162,7 @@ fn try_system_unicode_fallback_svg(
         if let Some(fallback) = font_cache.get(&FontId::MainRegular) {
             let fid = fallback.glyph_id(ch);
             if fid.0 != 0 {
-                if let Some(d) = outline_to_d(px, py, em, fallback, fid) {
+                if let Some(d) = outline_to_d(px, py, em, FontId::MainRegular, fallback, fid) {
                     return Some(StandaloneGlyph::Path(d));
                 }
             }
@@ -241,7 +171,7 @@ fn try_system_unicode_fallback_svg(
     if let Some(cjk) = font_cache.get(&FontId::CjkRegular) {
         let cid = cjk.glyph_id(ch);
         if cid.0 != 0 {
-            if let Some(d) = outline_to_d(px, py, em, cjk, cid) {
+            if let Some(d) = outline_to_d(px, py, em, FontId::CjkRegular, cjk, cid) {
                 return Some(StandaloneGlyph::Path(d));
             }
         }
@@ -252,7 +182,7 @@ fn try_system_unicode_fallback_svg(
     if let Some(fb) = font_cache.get(&FontId::CjkFallback) {
         let fid = fb.glyph_id(ch);
         if fid.0 != 0 {
-            return outline_to_d(px, py, em, fb, fid).map(StandaloneGlyph::Path);
+            return outline_to_d(px, py, em, FontId::CjkFallback, fb, fid).map(StandaloneGlyph::Path);
         }
     }
     None
@@ -262,17 +192,20 @@ fn outline_to_d(
     px: f32,
     py: f32,
     em: f32,
+    font_id: FontId,
     font: &FontRef<'_>,
     glyph_id: ab_glyph::GlyphId,
 ) -> Option<String> {
-    let outline = font.outline(glyph_id)?;
+    let curves = ratex_font_loader::outline_cache::get_or_compute_outline(
+        font_id, font, glyph_id,
+    )?;
     let units_per_em = font.units_per_em().unwrap_or(1000.0);
     let scale = em / units_per_em;
 
     let mut d = String::new();
     let mut last_end: Option<(f32, f32)> = None;
 
-    for curve in &outline.curves {
+    for curve in curves.iter() {
         let (start, end) = match curve {
             OutlineCurve::Line(p0, p1) => {
                 let sx = px + p0.x * scale;

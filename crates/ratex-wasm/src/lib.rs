@@ -62,13 +62,10 @@ fn sanitize_display_list(dl: &mut DisplayList) {
 
 fn sanitize_item(item: &mut DisplayItem) {
     match item {
-        DisplayItem::GlyphPath { x, y, scale, commands, .. } => {
+        DisplayItem::GlyphPath { x, y, scale, .. } => {
             sanitize_f64(x);
             sanitize_f64(y);
             sanitize_f64(scale);
-            for cmd in commands {
-                sanitize_path_command(cmd);
-            }
         }
         DisplayItem::Line { x, y, width, thickness, .. } => {
             sanitize_f64(x);

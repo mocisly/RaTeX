@@ -24,11 +24,6 @@ pub enum DisplayItem {
         scale: f64,
         font: String,
         char_code: u32,
-        /// Placeholder bounding-box paths from layout. Not used by any renderer
-        /// (all platforms draw glyphs via font + char_code). Skipped during
-        /// serialization to reduce JSON payload size.
-        #[serde(skip_serializing, default)]
-        commands: Vec<PathCommand>,
         color: Color,
     },
     /// Draw a horizontal line (fraction bars, overlines, etc.).

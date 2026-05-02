@@ -63,16 +63,49 @@ pub fn render_to_svg(list: &DisplayList, opts: &SvgOptions) -> String {
     #[cfg(feature = "embed-fonts")]
     let load_fonts = opts.embed_glyphs;
 
+    // Pre-render standalone glyphs while holding the font lock, then drop it.
+    // This avoids self-referential struct issues with FontRef borrowing from the lock guard.
     #[cfg(feature = "standalone")]
-    let font_data = if load_fonts {
-        standalone::load_all_fonts(&opts.font_dir).ok()
-    } else {
-        None
+    let prerendered_glyphs: Option<Vec<Option<standalone::StandaloneGlyph>>> = {
+        if load_fonts {
+            if let Ok(fonts) = ratex_font_loader::load_fonts_for_items(&opts.font_dir, &list.items)
+            {
+                if let Ok(font_refs) = standalone::build_font_refs(&fonts) {
+                    let em = opts.em_px();
+                    let pad = opts.padding;
+                    let mut out = Vec::with_capacity(list.items.len());
+                    for item in &list.items {
+                        let glyph = if let DisplayItem::GlyphPath {
+                            x,
+                            y,
+                            scale,
+                            font,
+                            char_code,
+                            ..
+                        } = item
+                        {
+                            let px = (*x * em + pad) as f32;
+                            let py = (*y * em + pad) as f32;
+                            let glyph_em = (*scale * em) as f32;
+                            standalone::standalone_glyph(
+                                px, py, glyph_em, font, *char_code, &font_refs,
+                            )
+                        } else {
+                            None
+                        };
+                        out.push(glyph);
+                    }
+                    Some(out)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     };
-    #[cfg(feature = "standalone")]
-    let font_cache = font_data
-        .as_ref()
-        .and_then(|d| standalone::build_font_cache(d).ok());
 
     let em = opts.em_px();
     let pad = opts.padding;
@@ -81,7 +114,9 @@ pub fn render_to_svg(list: &DisplayList, opts: &SvgOptions) -> String {
     let vb_h = total_h * em + 2.0 * pad;
 
     let mut body = String::new();
-    for item in &list.items {
+    for (item_idx, item) in list.items.iter().enumerate() {
+        #[cfg(not(feature = "standalone"))]
+        let _ = item_idx;
         match item {
             DisplayItem::GlyphPath {
                 x,
@@ -89,7 +124,6 @@ pub fn render_to_svg(list: &DisplayList, opts: &SvgOptions) -> String {
                 scale,
                 font,
                 char_code,
-                commands: _,
                 color,
             } => {
                 let g = GlyphEmit {
@@ -101,7 +135,12 @@ pub fn render_to_svg(list: &DisplayList, opts: &SvgOptions) -> String {
                     color,
                 };
                 #[cfg(feature = "standalone")]
-                emit_glyph(&mut body, g, opts, font_cache.as_ref());
+                {
+                    let prerendered = prerendered_glyphs
+                        .as_ref()
+                        .and_then(|v| v.get(item_idx).and_then(|g| g.as_ref()));
+                    emit_glyph_standalone(&mut body, g, opts, prerendered);
+                }
                 #[cfg(not(feature = "standalone"))]
                 emit_glyph_text(&mut body, g, opts);
             }
@@ -226,19 +265,16 @@ fn katex_face(font: &str) -> (&'static str, &'static str, &'static str) {
 }
 
 #[cfg(feature = "standalone")]
-fn emit_glyph(
+fn emit_glyph_standalone(
     out: &mut String,
     g: GlyphEmit<'_>,
     opts: &SvgOptions,
-    font_cache: Option<&std::collections::HashMap<ratex_font::FontId, ab_glyph::FontRef<'_>>>,
+    prerendered: Option<&standalone::StandaloneGlyph>,
 ) {
     if opts.embed_glyphs {
-        if let Some(cache) = font_cache {
-            let px = tx(g.x, opts) as f32;
-            let py = ty(g.y, opts) as f32;
-            let glyph_em = (g.scale * opts.em_px()) as f32;
-            match standalone::standalone_glyph(px, py, glyph_em, g.font, g.char_code, cache) {
-                Some(standalone::StandaloneGlyph::Path(d)) => {
+        if let Some(glyph) = prerendered {
+            match glyph {
+                standalone::StandaloneGlyph::Path(d) => {
                     let fill = color_to_svg(g.color);
                     use std::fmt::Write;
                     let _ = write!(
@@ -247,19 +283,18 @@ fn emit_glyph(
                     );
                     return;
                 }
-                Some(standalone::StandaloneGlyph::Image { href, x, y, w, h }) => {
+                standalone::StandaloneGlyph::Image { href, x, y, w, h } => {
                     use std::fmt::Write;
-                    let x_s = fmt_num(x as f64);
-                    let y_s = fmt_num(y as f64);
-                    let w_s = fmt_num(w as f64);
-                    let h_s = fmt_num(h as f64);
+                    let x_s = fmt_num(*x as f64);
+                    let y_s = fmt_num(*y as f64);
+                    let w_s = fmt_num(*w as f64);
+                    let h_s = fmt_num(*h as f64);
                     let _ = write!(
                         out,
                         r#"<image href="{href}" x="{x_s}" y="{y_s}" width="{w_s}" height="{h_s}" preserveAspectRatio="none"/>"#
                     );
                     return;
                 }
-                None => {}
             }
         }
     }
@@ -516,7 +551,6 @@ mod tests {
                     scale: 1.0,
                     font: "Math-Italic".to_string(),
                     char_code: b'x' as u32,
-                    commands: vec![],
                     color: Color::BLACK,
                 },
             ],
@@ -559,7 +593,6 @@ mod tests {
                 scale: 1.0,
                 font: "Math-Italic".to_string(),
                 char_code: b'x' as u32,
-                commands: vec![],
                 color: Color::BLACK,
             }],
             width: 1.0,

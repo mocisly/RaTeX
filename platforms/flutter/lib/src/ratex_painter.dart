@@ -67,8 +67,18 @@ class RaTeXPainter extends CustomPainter {
   // Flutter font family ("KaTeX_Math") plus weight/style attributes,
   // mirroring the web renderer's fontIdToCss() function.
 
-  static ({String family, FontWeight weight, FontStyle style}) _parseFontId(
+  /// For KaTeX font IDs (e.g. "Math-Italic") returns the registered family
+  /// "KaTeX_Math". For CJK/Emoji fallback IDs ("CJK-Regular", "CJK-Fallback",
+  /// "Emoji-Fallback") returns [family] == null so the engine falls back to
+  /// the system default font, which provides broad Unicode coverage.
+  static ({String? family, FontWeight weight, FontStyle style}) _parseFontId(
       String fontId) {
+    // CJK / emoji fallback: let the engine use system default.
+    if (fontId == 'CJK-Regular' || fontId == 'CJK-Fallback' ||
+        fontId == 'Emoji-Fallback') {
+      return (family: null, weight: FontWeight.normal, style: FontStyle.normal);
+    }
+
     // fontId examples: "Math-Italic", "Main-Bold", "Main-BoldItalic",
     //                  "AMS-Regular", "Size1-Regular"
     // Family prefix is everything before the first '-'.
@@ -89,6 +99,9 @@ class RaTeXPainter extends CustomPainter {
     final (:family, :weight, :style) = _parseFontId(g.font);
     final sizePx = _em(g.scale);
 
+    // When family is null (CJK/emoji), omit fontFamily so the engine falls
+    // back to the system default font (PingFang / Apple Color Emoji on iOS,
+    // platform system font on Android).
     final pb = ui.ParagraphBuilder(ui.ParagraphStyle(
       fontFamily: family,
       fontWeight: weight,

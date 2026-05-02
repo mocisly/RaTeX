@@ -32,13 +32,17 @@ pub(crate) fn go_machine(ctx: &ParserCtx<'_>, input: &str, machine: &str) -> Mhc
     let mut state = "0".to_string();
     let mut buffer = Buffer::new();
     let mut output: Vec<Value> = vec![];
-    let mut last_input = String::new();
+    let mut last_input_ptr = std::ptr::null();
+    let mut last_input_len = 0;
     let mut watchdog = 10i32;
 
     loop {
-        if last_input != input {
+        let ptr = input.as_ptr();
+        let len = input.len();
+        if ptr != last_input_ptr || len != last_input_len {
             watchdog = 10;
-            last_input = input.clone();
+            last_input_ptr = ptr;
+            last_input_len = len;
         } else {
             watchdog -= 1;
         }

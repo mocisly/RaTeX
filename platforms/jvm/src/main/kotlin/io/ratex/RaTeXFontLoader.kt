@@ -105,10 +105,28 @@ object RaTeXFontLoader {
 
     /**
      * Get cached base Font for a font ID (e.g. "Main-Regular", "Math-Italic").
-     * Returns null if not loaded.
+     * For CJK/emoji fallback IDs that have no bundled KaTeX font, resolves to the
+     * JVM logical "SansSerif" font which has broad Unicode coverage via the system
+     * font fallback chain (Noto / PingFang / Segoe UI Symbol / etc.).
+     * Returns null if not loaded and not a known fallback; Renderer will skip drawing.
      */
     @JvmStatic
-    fun getFont(fontId: String): Font? = cache[fontId]
+    fun getFont(fontId: String): Font? {
+        cache[fontId]?.let { return it }
+        val systemFallback = resolveSystemFallback(fontId) ?: return null
+        cache.putIfAbsent(fontId, systemFallback)
+        return systemFallback
+    }
+
+    /**
+     * Map CJK/emoji font IDs to the JVM logical "SansSerif" font (size 12 as base).
+     * The renderer derives the correct size from the glyph's scale attribute, so the
+     * base size here doesn't affect final rendering.
+     */
+    private fun resolveSystemFallback(fontId: String): Font? = when (fontId) {
+        "CJK-Regular", "CJK-Fallback", "Emoji-Fallback" -> Font(Font.SANS_SERIF, Font.PLAIN, 12)
+        else -> null
+    }
 
     /** Clear cache (e.g. for tests). */
     @JvmStatic

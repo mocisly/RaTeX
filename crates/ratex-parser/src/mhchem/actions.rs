@@ -8,6 +8,17 @@ use crate::mhchem::patterns::{match_pattern, MatchToken};
 use crate::mhchem::ParserCtx;
 use regex::Regex;
 use serde_json::{json, Value};
+use std::sync::LazyLock;
+
+static RE_DIGITS_ONLY: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[0-9]+$").unwrap());
+static RE_CELSIUS_C: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\u{00B0}C|\^oC|\^\{o\}C").unwrap());
+static RE_CELSIUS_F: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\u{00B0}F|\^oF|\^\{o\}F").unwrap());
+static RE_HALF: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^([0-9]+|\$[a-z]\$|[a-z])\/([0-9]+)(\$[a-z]\$|[a-z])?$").unwrap()
+});
 
 pub fn apply(
     ctx: &ParserCtx,
@@ -21,8 +32,8 @@ pub fn apply(
         ("ce", "output") => ce_output(ctx, buffer, spec.option.as_ref()),
         ("ce", "o after d") => ce_o_after_d(ctx, buffer, m),
         ("ce", "d= kv") => {
-            buffer.d = Some(token_string(m));
-            buffer.d_type = Some("kv".into());
+            Buffer::set_slot(&mut buffer.d, token_string(m));
+            Buffer::set_slot(&mut buffer.d_type, "kv".into());
             Ok(vec![])
         }
         ("ce", "charge or bond") => ce_charge_or_bond(ctx, buffer, m),
@@ -230,13 +241,13 @@ fn ce_o_after_d(ctx: &ParserCtx, buffer: &mut Buffer, m: &MatchToken) -> MhchemR
     let digits_only = buffer
         .d
         .as_deref()
-        .map(|d| Regex::new(r"^[0-9]+$").unwrap().is_match(d))
+        .map(|d| RE_DIGITS_ONLY.is_match(d))
         .unwrap_or(false);
     if digits_only {
         let tmp = buffer.d.take().unwrap();
         buffer.d = None;
         ret.extend(ce_output(ctx, buffer, None)?);
-        buffer.b = Some(tmp);
+        Buffer::set_slot(&mut buffer.b, tmp);
     } else {
         ret.extend(ce_output(ctx, buffer, None)?);
     }
@@ -250,7 +261,7 @@ fn ce_charge_or_bond(ctx: &ParserCtx, buffer: &mut Buffer, m: &MatchToken) -> Mh
         ret.push(json!({"type_": "bond", "kind_": "-"}));
         Ok(ret)
     } else {
-        buffer.d = Some(token_string(m));
+        Buffer::set_slot(&mut buffer.d, token_string(m));
         Ok(vec![])
     }
 }
@@ -272,16 +283,16 @@ fn ce_after_od(
         dash == "-" && (h_orb || c2.is_some() || c3.is_some() || c4.is_some());
 
     if hyphen_follows
-        && buffer.a.is_none()
-        && buffer.b.is_none()
-        && buffer.p.is_none()
-        && buffer.d.is_none()
-        && buffer.q.is_none()
+        && Buffer::is_slot_empty(&buffer.a)
+        && Buffer::is_slot_empty(&buffer.b)
+        && Buffer::is_slot_empty(&buffer.p)
+        && Buffer::is_slot_empty(&buffer.d)
+        && Buffer::is_slot_empty(&buffer.q)
         && c1.is_none()
         && c3.is_some()
     {
         let oo = buffer.o.take().unwrap_or_default();
-        buffer.o = Some(format!("${oo}$"));
+        Buffer::set_slot(&mut buffer.o, format!("${oo}$"));
     }
 
     let mut ret = vec![];
@@ -313,13 +324,13 @@ fn ce_output(ctx: &ParserCtx, buffer: &mut Buffer, entity: Option<&Value>) -> Mh
         }
     });
 
-    if buffer.r.is_none() {
-        let empty_piece = buffer.a.is_none()
-            && buffer.b.is_none()
-            && buffer.p.is_none()
-            && buffer.o.is_none()
-            && buffer.q.is_none()
-            && buffer.d.is_none()
+    if Buffer::is_slot_empty(&buffer.r) {
+        let empty_piece = Buffer::is_slot_empty(&buffer.a)
+            && Buffer::is_slot_empty(&buffer.b)
+            && Buffer::is_slot_empty(&buffer.p)
+            && Buffer::is_slot_empty(&buffer.o)
+            && Buffer::is_slot_empty(&buffer.q)
+            && Buffer::is_slot_empty(&buffer.d)
             && entity_follows.is_none();
         if empty_piece {
             buffer.clear_soft();
@@ -332,7 +343,7 @@ fn ce_output(ctx: &ParserCtx, buffer: &mut Buffer, entity: Option<&Value>) -> Mh
         }
 
         let mut d_type = buffer.d_type.clone();
-        if buffer.o.is_some()
+        if !Buffer::is_slot_empty(&buffer.o)
             && d_type.as_deref() == Some("kv")
             && match_pattern(ctx.data, "d-oxidation$", buffer.d.as_deref().unwrap_or(""))
                 .ok()
@@ -340,15 +351,15 @@ fn ce_output(ctx: &ParserCtx, buffer: &mut Buffer, entity: Option<&Value>) -> Mh
                 .is_some()
         {
             d_type = Some("oxidation".into());
-        } else if buffer.o.is_some() && d_type.as_deref() == Some("kv") && buffer.q.is_none() {
+        } else if !Buffer::is_slot_empty(&buffer.o) && d_type.as_deref() == Some("kv") && Buffer::is_slot_empty(&buffer.q) {
             d_type = None;
         }
 
-        if buffer.o.is_none() && buffer.q.is_none() && buffer.d.is_none() && buffer.b.is_none() && buffer.p.is_none()
+        if Buffer::is_slot_empty(&buffer.o) && Buffer::is_slot_empty(&buffer.q) && Buffer::is_slot_empty(&buffer.d) && Buffer::is_slot_empty(&buffer.b) && Buffer::is_slot_empty(&buffer.p)
             && entity_follows != Some(2)
         {
             buffer.o = buffer.a.take();
-        } else if buffer.o.is_none() && buffer.q.is_none() && buffer.d.is_none() && (buffer.b.is_some() || buffer.p.is_some())
+        } else if Buffer::is_slot_empty(&buffer.o) && Buffer::is_slot_empty(&buffer.q) && Buffer::is_slot_empty(&buffer.d) && (!Buffer::is_slot_empty(&buffer.b) || !Buffer::is_slot_empty(&buffer.p))
         {
             buffer.o = buffer.a.take();
             buffer.d = buffer.b.take();
@@ -498,12 +509,10 @@ fn pu_output(ctx: &ParserCtx, buffer: &mut Buffer) -> MhchemResult<Vec<Value>> {
             }
         }
     }
-    let re_c = Regex::new(r"\u{00B0}C|\^oC|\^\{o\}C").unwrap();
-    d = re_c.replace_all(&d, "{}^{\\circ}C").to_string();
-    qv = re_c.replace_all(&qv, "{}^{\\circ}C").to_string();
-    let re_f = Regex::new(r"\u{00B0}F|\^oF|\^\{o\}F").unwrap();
-    let d = re_f.replace_all(&d, "{}^{\\circ}F").to_string();
-    let qv = re_f.replace_all(&qv, "{}^{\\circ}F").to_string();
+    d = RE_CELSIUS_C.replace_all(&d, "{}^{\\circ}C").to_string();
+    qv = RE_CELSIUS_C.replace_all(&qv, "{}^{\\circ}C").to_string();
+    let d = RE_CELSIUS_F.replace_all(&d, "{}^{\\circ}F").to_string();
+    let qv = RE_CELSIUS_F.replace_all(&qv, "{}^{\\circ}F").to_string();
 
     let res = if !qv.is_empty() {
         let b5d = engine::go_machine(ctx, &d, "pu")?;
@@ -625,22 +634,22 @@ fn global_action(
             Ok(vec![])
         }
         "r=" => {
-            buffer.r = Some(token_string(m));
+            Buffer::set_slot(&mut buffer.r, token_string(m));
             Ok(vec![])
         }
         "rdt=" | "rqt=" => {
             if spec.type_ == "rdt=" {
-                buffer.rdt = Some(token_string(m));
+                Buffer::set_slot(&mut buffer.rdt, token_string(m));
             } else {
-                buffer.rqt = Some(token_string(m));
+                Buffer::set_slot(&mut buffer.rqt, token_string(m));
             }
             Ok(vec![])
         }
         "rd=" | "rq=" => {
             if spec.type_ == "rd=" {
-                buffer.rd = Some(token_string(m));
+                Buffer::set_slot(&mut buffer.rd, token_string(m));
             } else {
-                buffer.rq = Some(token_string(m));
+                Buffer::set_slot(&mut buffer.rq, token_string(m));
             }
             Ok(vec![])
         }
@@ -722,7 +731,10 @@ fn global_action(
 
 fn cat(slot: &mut Option<String>, m: &MatchToken) {
     let t = token_string(m);
-    *slot = Some(format!("{}{}", slot.take().unwrap_or_default(), t));
+    match slot {
+        Some(s) => s.push_str(&t),
+        None => *slot = Some(t),
+    }
 }
 
 fn half_action(m: &MatchToken) -> MhchemResult<Vec<Value>> {
@@ -732,8 +744,7 @@ fn half_action(m: &MatchToken) -> MhchemResult<Vec<Value>> {
         ret.push(Value::String(s[..1].to_string()));
         s = s[1..].to_string();
     }
-    let re = Regex::new(r"^([0-9]+|\$[a-z]\$|[a-z])\/([0-9]+)(\$[a-z]\$|[a-z])?$").unwrap();
-    let Some(c) = re.captures(&s) else {
+    let Some(c) = RE_HALF.captures(&s) else {
         return Ok(vec![]);
     };
     let n1 = c.get(1).unwrap().as_str().replace('$', "");

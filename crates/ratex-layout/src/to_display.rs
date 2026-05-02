@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use ratex_types::display_item::{DisplayItem, DisplayList};
 use ratex_types::path_command::PathCommand;
 
@@ -17,7 +19,8 @@ const SURD_CHAR: u32 = 0x221A;
 pub fn to_display_list(root: &LayoutBox) -> DisplayList {
     let mut items = Vec::new();
     let baseline_y = root.height;
-    emit_box(root, 0.0, baseline_y, 1.0, &mut items);
+    let mut font_str_cache: HashMap<ratex_font::FontId, String> = HashMap::new();
+    emit_box(root, 0.0, baseline_y, 1.0, &mut items, &mut font_str_cache);
 
     if items.is_empty() {
         return DisplayList {
@@ -116,12 +119,19 @@ pub fn to_display_list(root: &LayoutBox) -> DisplayList {
 ///
 /// `x`, `y` are the position of the box's baseline-left corner in absolute coordinates.
 /// `scale` is the cumulative size multiplier (1.0 at root, 0.7 in script, 0.5 in scriptscript).
-fn emit_box(lbox: &LayoutBox, x: f64, y: f64, scale: f64, items: &mut Vec<DisplayItem>) {
+fn emit_box(
+    lbox: &LayoutBox,
+    x: f64,
+    y: f64,
+    scale: f64,
+    items: &mut Vec<DisplayItem>,
+    font_str_cache: &mut HashMap<ratex_font::FontId, String>,
+) {
     match &lbox.content {
         BoxContent::HBox(children) => {
             let mut cur_x = x;
             for child in children {
-                emit_box(child, cur_x, y, scale, items);
+                emit_box(child, cur_x, y, scale, items, font_str_cache);
                 cur_x += child.width * scale;
             }
         }
@@ -132,7 +142,7 @@ fn emit_box(lbox: &LayoutBox, x: f64, y: f64, scale: f64, items: &mut Vec<Displa
                 match &child.kind {
                     VBoxChildKind::Box(b) => {
                         cur_y += b.height * scale;
-                        emit_box(b, x + child.shift * scale, cur_y, scale, items);
+                        emit_box(b, x + child.shift * scale, cur_y, scale, items, font_str_cache);
                         cur_y += b.depth * scale;
                     }
                     VBoxChildKind::Kern(k) => {
@@ -143,19 +153,15 @@ fn emit_box(lbox: &LayoutBox, x: f64, y: f64, scale: f64, items: &mut Vec<Displa
         }
 
         BoxContent::Glyph { font_id, char_code } => {
-            let (w, h, d) = if let Some(metrics) = ratex_font::get_char_metrics(*font_id, *char_code) {
-                (metrics.width, metrics.height, metrics.depth)
-            } else {
-                (lbox.width, lbox.height, lbox.depth)
-            };
-            let commands = glyph_placeholder_commands(w, h, d);
+            let font_str = font_str_cache
+                .entry(*font_id)
+                .or_insert_with(|| font_id.as_str().to_string());
             items.push(DisplayItem::GlyphPath {
                 x,
                 y,
                 scale,
-                font: font_id.as_str().to_string(),
+                font: font_str.clone(),
                 char_code: *char_code,
-                commands,
                 color: lbox.color,
             });
         }
@@ -186,10 +192,10 @@ fn emit_box(lbox: &LayoutBox, x: f64, y: f64, scale: f64, items: &mut Vec<Displa
             let child_denom_scale = scale * d_sc;
 
             let frac_x = x + (lbox.width * scale - numer.width * child_numer_scale) / 2.0;
-            emit_box(numer, frac_x, y - numer_shift * scale, child_numer_scale, items);
+            emit_box(numer, frac_x, y - numer_shift * scale, child_numer_scale, items, font_str_cache);
 
             let frac_x = x + (lbox.width * scale - denom.width * child_denom_scale) / 2.0;
-            emit_box(denom, frac_x, y + denom_shift * scale, child_denom_scale, items);
+            emit_box(denom, frac_x, y + denom_shift * scale, child_denom_scale, items, font_str_cache);
 
             if *bar_thickness > 0.0 {
                 let metrics = ratex_font::get_global_metrics(0);
@@ -221,7 +227,7 @@ fn emit_box(lbox: &LayoutBox, x: f64, y: f64, scale: f64, items: &mut Vec<Displa
             } else {
                 x
             };
-            emit_box(base, base_x, y, scale, items);
+            emit_box(base, base_x, y, scale, items, font_str_cache);
             if let Some(sup_box) = sup {
                 let child_scale = scale * ss;
                 let sup_x = if *center_scripts {
@@ -229,7 +235,7 @@ fn emit_box(lbox: &LayoutBox, x: f64, y: f64, scale: f64, items: &mut Vec<Displa
                 } else {
                     base_x + (base.width + italic_correction) * scale
                 };
-                emit_box(sup_box, sup_x, y - sup_shift * scale, child_scale, items);
+                emit_box(sup_box, sup_x, y - sup_shift * scale, child_scale, items, font_str_cache);
             }
             if let Some(sub_box) = sub {
                 let child_scale = scale * bs;
@@ -238,7 +244,7 @@ fn emit_box(lbox: &LayoutBox, x: f64, y: f64, scale: f64, items: &mut Vec<Displa
                 } else {
                     base_x + base.width * scale + sub_h_kern * scale
                 };
-                emit_box(sub_box, sub_x, y + sub_shift * scale, child_scale, items);
+                emit_box(sub_box, sub_x, y + sub_shift * scale, child_scale, items, font_str_cache);
             }
         }
 
@@ -275,28 +281,24 @@ fn emit_box(lbox: &LayoutBox, x: f64, y: f64, scale: f64, items: &mut Vec<Displa
                     index_baseline_y,
                     child_scale,
                     items,
+                    font_str_cache,
                 );
             }
             let surd_font = surd_font_for_inner_height(*inner_height);
-            let (gw, gh, gd) = ratex_font::get_char_metrics(surd_font, SURD_CHAR)
-                .map(|m| (m.width, m.height, m.depth))
-                .unwrap_or((radical_width, lbox.height, lbox.depth));
-            let commands = glyph_placeholder_commands(gw, gh, gd);
-
-            // Shift the surd glyph up so its top bar aligns with the vinculum.
-            // The layout places the vinculum at `lbox.height` above the baseline, but the
-            // font glyph height `gh` can be less than `lbox.height - rule_thickness`, causing
-            // the glyph's bar to sit too close to the body content. We shift the glyph up by
-            // the difference so the bar top is exactly at `lbox.height - rule_thickness`.
+            let gh = ratex_font::get_char_metrics(surd_font, SURD_CHAR)
+                .map(|m| m.height)
+                .unwrap_or(lbox.height - rule_thickness);
+            let surd_font_str = font_str_cache
+                .entry(surd_font)
+                .or_insert_with(|| surd_font.as_str().to_string());
             let surd_shift = lbox.height - rule_thickness - gh;
             let surd_y = y - surd_shift * scale;
             items.push(DisplayItem::GlyphPath {
                 x: surd_x,
                 y: surd_y,
                 scale,
-                font: surd_font.as_str().to_string(),
+                font: surd_font_str.clone(),
                 char_code: SURD_CHAR,
-                commands,
                 color: lbox.color,
             });
 
@@ -312,7 +314,7 @@ fn emit_box(lbox: &LayoutBox, x: f64, y: f64, scale: f64, items: &mut Vec<Displa
                 dashed: false,
             });
 
-            emit_box(body, surd_x + radical_width * scale, y, scale, items);
+            emit_box(body, surd_x + radical_width * scale, y, scale, items, font_str_cache);
         }
 
         BoxContent::OpLimits {
@@ -327,19 +329,19 @@ fn emit_box(lbox: &LayoutBox, x: f64, y: f64, scale: f64, items: &mut Vec<Displa
             sub_scale: bs,
         } => {
             let base_x = x + (lbox.width - base.width) * scale / 2.0;
-            emit_box(base, base_x, y + base_shift * scale, scale, items);
+            emit_box(base, base_x, y + base_shift * scale, scale, items, font_str_cache);
 
             if let Some(sup_box) = sup {
                 let child_scale = scale * ss;
                 let sup_x = x + (lbox.width * scale - sup_box.width * child_scale) / 2.0 + slant * scale / 2.0;
                 let sup_y = y - (base.height - base_shift) * scale - sup_kern * scale - sup_box.depth * child_scale;
-                emit_box(sup_box, sup_x, sup_y, child_scale, items);
+                emit_box(sup_box, sup_x, sup_y, child_scale, items, font_str_cache);
             }
             if let Some(sub_box) = sub {
                 let child_scale = scale * bs;
                 let sub_x = x + (lbox.width * scale - sub_box.width * child_scale) / 2.0 - slant * scale / 2.0;
                 let sub_y = y + (base.depth + base_shift) * scale + sub_kern * scale + sub_box.height * child_scale;
-                emit_box(sub_box, sub_x, sub_y, child_scale, items);
+                emit_box(sub_box, sub_x, sub_y, child_scale, items, font_str_cache);
             }
         }
 
@@ -351,12 +353,12 @@ fn emit_box(lbox: &LayoutBox, x: f64, y: f64, scale: f64, items: &mut Vec<Displa
             is_below,
             under_gap_em,
         } => {
-            emit_box(base, x, y, scale, items);
+            emit_box(base, x, y, scale, items, font_str_cache);
             if *is_below {
                 let accent_x = x + (base.width - accent.width) * scale / 2.0;
                 let accent_y =
                     y + (base.depth + under_gap_em) * scale + accent.height * scale;
-                emit_box(accent, accent_x, accent_y, scale, items);
+                emit_box(accent, accent_x, accent_y, scale, items, font_str_cache);
             } else {
                 let accent_x = x + (base.width - accent.width) * scale / 2.0 + skew * scale;
                 // Position accent so its TOP is at (clearance + effective_accent_height) above baseline.
@@ -373,17 +375,17 @@ fn emit_box(lbox: &LayoutBox, x: f64, y: f64, scale: f64, items: &mut Vec<Displa
                     // Simpler: shift glyph so top is at y - clearance - small_gap
                     y - clearance * scale + (accent.height - 0.35_f64.min(accent.height)) * scale
                 };
-                emit_box(accent, accent_x, accent_y, scale, items);
+                emit_box(accent, accent_x, accent_y, scale, items, font_str_cache);
             }
         }
 
         BoxContent::LeftRight { left, right, inner } => {
             let mut cur_x = x;
-            emit_box(left, cur_x, y, scale, items);
+            emit_box(left, cur_x, y, scale, items, font_str_cache);
             cur_x += left.width * scale;
-            emit_box(inner, cur_x, y, scale, items);
+            emit_box(inner, cur_x, y, scale, items, font_str_cache);
             cur_x += inner.width * scale;
-            emit_box(right, cur_x, y, scale, items);
+            emit_box(right, cur_x, y, scale, items, font_str_cache);
         }
 
         BoxContent::Array {
@@ -499,7 +501,7 @@ fn emit_box(lbox: &LayoutBox, x: f64, y: f64, scale: f64, items: &mut Vec<Displa
                         b'r' => cur_x + (cw - cell.width) * scale,
                         _ => cur_x + (cw - cell.width) * scale / 2.0,
                     };
-                    emit_box(cell, cell_x, cur_y, scale, items);
+                    emit_box(cell, cell_x, cur_y, scale, items, font_str_cache);
                     cur_x += cw * scale;
                     if c + 1 < row.len() {
                         cur_x += col_gap * scale;
@@ -510,7 +512,7 @@ fn emit_box(lbox: &LayoutBox, x: f64, y: f64, scale: f64, items: &mut Vec<Displa
                         let tag_start_em = array_inner_width - content_x_offset + tag_gap_em;
                         let tag_x =
                             x + tag_start_em * scale + (tag_col_width - tb.width) * scale;
-                        emit_box(tb, tag_x, cur_y, scale, items);
+                        emit_box(tb, tag_x, cur_y, scale, items, font_str_cache);
                     }
                 }
                 cur_y += row_depths[r] * scale;
@@ -594,15 +596,15 @@ fn emit_box(lbox: &LayoutBox, x: f64, y: f64, scale: f64, items: &mut Vec<Displa
 
             // Body content (shifted by padding + border from left baseline)
             let inner_offset = (padding + border_thickness) * scale;
-            emit_box(body, x + inner_offset, y, scale, items);
+            emit_box(body, x + inner_offset, y, scale, items, font_str_cache);
         }
 
         BoxContent::RaiseBox { body, shift } => {
-            emit_box(body, x, y - shift * scale, scale, items);
+            emit_box(body, x, y - shift * scale, scale, items, font_str_cache);
         }
 
         BoxContent::Scaled { body, child_scale } => {
-            emit_box(body, x, y, scale * child_scale, items);
+            emit_box(body, x, y, scale * child_scale, items, font_str_cache);
         }
 
         BoxContent::Angl { path_commands, body } => {
@@ -617,11 +619,11 @@ fn emit_box(lbox: &LayoutBox, x: f64, y: f64, scale: f64, items: &mut Vec<Displa
                 fill: false,
                 color: lbox.color,
             });
-            emit_box(body, x, y, scale, items);
+            emit_box(body, x, y, scale, items, font_str_cache);
         }
 
         BoxContent::Overline { body, rule_thickness } => {
-            emit_box(body, x, y, scale, items);
+            emit_box(body, x, y, scale, items, font_str_cache);
             // Rule center is at 2.5 * rule_thickness above the body's top
             let rule_center_y = y - (body.height + 2.5 * rule_thickness) * scale;
             items.push(DisplayItem::Line {
@@ -635,7 +637,7 @@ fn emit_box(lbox: &LayoutBox, x: f64, y: f64, scale: f64, items: &mut Vec<Displa
         }
 
         BoxContent::Underline { body, rule_thickness } => {
-            emit_box(body, x, y, scale, items);
+            emit_box(body, x, y, scale, items, font_str_cache);
             // Rule center is at 2.5 * rule_thickness below the body's bottom
             let rule_center_y = y + (body.depth + 2.5 * rule_thickness) * scale;
             items.push(DisplayItem::Line {
@@ -680,21 +682,7 @@ fn scale_path_command(cmd: &PathCommand, scale: f64) -> PathCommand {
     }
 }
 
-/// Placeholder glyph path: a simple rectangle matching the character metrics.
-fn glyph_placeholder_commands(width: f64, height: f64, depth: f64) -> Vec<PathCommand> {
-    vec![
-        PathCommand::MoveTo { x: 0.0, y: -height },
-        PathCommand::LineTo { x: width, y: -height },
-        PathCommand::LineTo {
-            x: width,
-            y: depth,
-        },
-        PathCommand::LineTo { x: 0.0, y: depth },
-        PathCommand::Close,
-    ]
-}
-
-/// Compute the visual bounding box from glyph, line, rect, and path items (paths only when
+/// Compute the visual bounding box from line, rect, and path items (paths only when
 /// coordinates are within a sane em range — skips huge KaTeX `viewBox` artifacts).
 /// Returns (min_x, max_x, min_y, max_y) in em coordinates.
 fn compute_visual_bounds(items: &[DisplayItem]) -> (f64, f64, f64, f64) {
@@ -705,19 +693,27 @@ fn compute_visual_bounds(items: &[DisplayItem]) -> (f64, f64, f64, f64) {
 
     for item in items {
         match item {
-            DisplayItem::GlyphPath { x, y, scale, commands, .. } => {
-                for cmd in commands {
-                    if let PathCommand::MoveTo { x: cx, y: cy }
-                        | PathCommand::LineTo { x: cx, y: cy } = cmd
-                    {
-                        let abs_x = x + cx * scale;
-                        let abs_y = y + cy * scale;
-                        min_x = min_x.min(abs_x);
-                        max_x = max_x.max(abs_x);
-                        min_y = min_y.min(abs_y);
-                        max_y = max_y.max(abs_y);
-                    }
-                }
+            // Compute glyph extent from font metrics so edge cases like \smash
+            // (zero nominal height) and \mathllap (zero nominal width) are
+            // correctly sized: the pixmap is dimensioned from nominal bounds,
+            // but smashed/llap boxes have near-zero nominal dimensions.
+            DisplayItem::GlyphPath {
+                x,
+                y,
+                scale,
+                font,
+                char_code,
+                ..
+            } => {
+                let font_id =
+                    ratex_font::FontId::parse(font).unwrap_or(ratex_font::FontId::MainRegular);
+                let (w, h, d) = ratex_font::get_char_metrics(font_id, *char_code)
+                    .map(|m| (m.width, m.height, m.depth))
+                    .unwrap_or((0.0, 0.0, 0.0));
+                min_x = min_x.min(*x);
+                max_x = max_x.max(x + w * scale);
+                min_y = min_y.min(y - h * scale);
+                max_y = max_y.max(y + d * scale);
             }
             DisplayItem::Line { x, y, width, thickness, .. } => {
                 min_x = min_x.min(*x);

@@ -1,0 +1,1 @@
+../../../skills/render-bench/SKILL.md

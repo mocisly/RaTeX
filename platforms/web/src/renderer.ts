@@ -48,6 +48,11 @@ function fontIdToCss(fontId: string, sizePx: number): string {
     case "Size3-Regular":      return `${sizePx}px KaTeX_Size3`;
     case "Size4-Regular":      return `${sizePx}px KaTeX_Size4`;
     case "Typewriter-Regular": return `${sizePx}px KaTeX_Typewriter`;
+    // CJK / emoji fallback: KaTeX fonts don't cover these glyphs;
+    // use system UI font stack that has broad Unicode coverage on all platforms.
+    case "CJK-Regular":
+    case "CJK-Fallback":
+    case "Emoji-Fallback":     return `${sizePx}px sans-serif`;
     default:                   return `${sizePx}px KaTeX_Main`;
   }
 }

@@ -172,13 +172,40 @@ static RE_AGG_OPEN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\([a-z]{1,3
 static RE_CMD_BRACE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\\[a-zA-Z]+\{").unwrap());
 static RE_BEFORE_BRACE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(?=\{)").unwrap());
+static RE_NEG_POW: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"^(\+\-|\+\/\-|\+|\-|\\pm\s?)?([0-9]+(?:[,.][0-9]+)?|[0-9]*(?:\.[0-9]+)?)\^([+\-]?[0-9]+|\{[+\-]?[0-9]+\})",
+    ).unwrap()
+});
+static RE_SCI: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"^(\+\-|\+\/\-|\+|\-|\\pm\s?)?([0-9]+(?:[,.][0-9]+)?|[0-9]*(?:\.[0-9]+))?(\((?:[0-9]+(?:[,.][0-9]+)?|[0-9]*(?:\.[0-9]+))\))?(?:([eE]|\s*(\*|x|\\times|\u{00D7})\s*10\^)([+\-]?[0-9]+|\{[+\-]?[0-9]+\}))?",
+    ).unwrap()
+});
+static RE_SOA_REMAINDER: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^($|[\s,;\)\]\}])").unwrap());
+static RE_SOA_ALT: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^(?:\((?:\\ca\s?)?\$[amothc]\$\))").unwrap());
+static RE_AMOUNT_MAIN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"^(?:(?:(?:\([+\-]?[0-9]+\/[0-9]+\)|[+\-]?(?:[0-9]+|\$[a-z]\$|[a-z])\/[0-9]+|[+\-]?[0-9]+[.,][0-9]+|[+\-]?\.[0-9]+|[+\-]?[0-9]+)(?:[a-z](?=\s*[A-Z]))?)|[+\-]?[a-z](?=\s*[A-Z])|\+(?!\s))",
+    ).unwrap()
+});
+static RE_AMOUNT_DOLLAR: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"^\$(?:\(?[+\-]?(?:[0-9]*[a-z]?[+\-])?[0-9]*[a-z](?:[+\-][0-9]*[a-z]?)?\)?|\+|-)\$$",
+    ).unwrap()
+});
+static RE_FORMULA_PAREN_ONLY: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\([a-z]+\)$").unwrap());
+static RE_FORMULA_MAIN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"^(?:[a-z]|(?:[0-9\ \+\-\,\.\(\)]+[a-z])+[0-9\ \+\-\,\.\(\)]*|(?:[a-z][0-9\ \+\-\,\.\(\)]+)+[a-z]?)",
+    ).unwrap()
+});
 
 fn pattern_neg_pow(input: &str) -> MhchemResult<Option<PatternHit>> {
-    let re = Regex::new(
-        r"^(\+\-|\+\/\-|\+|\-|\\pm\s?)?([0-9]+(?:[,.][0-9]+)?|[0-9]*(?:\.[0-9]+)?)\^([+\-]?[0-9]+|\{[+\-]?[0-9]+\})",
-    )
-    .unwrap();
-    let Some(c) = re.captures(input).ok().flatten() else {
+    let Some(c) = RE_NEG_POW.captures(input).ok().flatten() else {
         return Ok(None);
     };
     let full = c.get(0).unwrap();
@@ -193,11 +220,7 @@ fn pattern_neg_pow(input: &str) -> MhchemResult<Option<PatternHit>> {
 }
 
 fn pattern_sci(input: &str) -> MhchemResult<Option<PatternHit>> {
-    let re = Regex::new(
-        r"^(\+\-|\+\/\-|\+|\-|\\pm\s?)?([0-9]+(?:[,.][0-9]+)?|[0-9]*(?:\.[0-9]+))?(\((?:[0-9]+(?:[,.][0-9]+)?|[0-9]*(?:\.[0-9]+))\))?(?:([eE]|\s*(\*|x|\\times|\u{00D7})\s*10\^)([+\-]?[0-9]+|\{[+\-]?[0-9]+\}))?",
-    )
-    .unwrap();
-    let Some(c) = re.captures(input).ok().flatten() else {
+    let Some(c) = RE_SCI.captures(input).ok().flatten() else {
         return Ok(None);
     };
     let full = c.get(0).unwrap();
@@ -224,8 +247,7 @@ fn pattern_state_of_agg(input: &str) -> MhchemResult<Option<PatternHit>> {
         None,
         false,
     )? {
-        let r = Regex::new(r"^($|[\s,;\)\]\}])").unwrap();
-        if r.find(&h.remainder)
+        if RE_SOA_REMAINDER.find(&h.remainder)
             .ok()
             .flatten()
             .filter(|m| m.start() == 0)
@@ -234,7 +256,7 @@ fn pattern_state_of_agg(input: &str) -> MhchemResult<Option<PatternHit>> {
             return Ok(Some(h));
         }
     }
-    let re = Regex::new(r"^(?:\((?:\\ca\s?)?\$[amothc]\$\))").unwrap();
+    let re = &*RE_SOA_ALT;
     if let Some(m) = re.find(input).ok().flatten() {
         return Ok(Some(PatternHit {
             token: MatchToken::S(m.as_str().to_string()),
@@ -245,11 +267,7 @@ fn pattern_state_of_agg(input: &str) -> MhchemResult<Option<PatternHit>> {
 }
 
 fn pattern_amount(input: &str) -> MhchemResult<Option<PatternHit>> {
-    let re = Regex::new(
-        r"^(?:(?:(?:\([+\-]?[0-9]+\/[0-9]+\)|[+\-]?(?:[0-9]+|\$[a-z]\$|[a-z])\/[0-9]+|[+\-]?[0-9]+[.,][0-9]+|[+\-]?\.[0-9]+|[+\-]?[0-9]+)(?:[a-z](?=\s*[A-Z]))?)|[+\-]?[a-z](?=\s*[A-Z])|\+(?!\s))",
-    )
-    .unwrap();
-    if let Some(m) = re.find(input).ok().flatten() {
+    if let Some(m) = RE_AMOUNT_MAIN.find(input).ok().flatten() {
         return Ok(Some(PatternHit {
             token: MatchToken::S(m.as_str().to_string()),
             remainder: input[m.end()..].to_string(),
@@ -261,11 +279,7 @@ fn pattern_amount(input: &str) -> MhchemResult<Option<PatternHit>> {
     let MatchToken::S(ref s) = h.token else {
         return Ok(None);
     };
-    let re2 = Regex::new(
-        r"^\$(?:\(?[+\-]?(?:[0-9]*[a-z]?[+\-])?[0-9]*[a-z](?:[+\-][0-9]*[a-z]?)?\)?|\+|-)\$$",
-    )
-    .unwrap();
-    if re2.find(s).ok().flatten().is_some() {
+    if RE_AMOUNT_DOLLAR.find(s).ok().flatten().is_some() {
         Ok(Some(PatternHit {
             token: MatchToken::S(s.clone()),
             remainder: h.remainder,
@@ -276,15 +290,10 @@ fn pattern_amount(input: &str) -> MhchemResult<Option<PatternHit>> {
 }
 
 fn pattern_formula(input: &str) -> MhchemResult<Option<PatternHit>> {
-    let st = Regex::new(r"^\([a-z]+\)$").unwrap();
-    if st.is_match(input).unwrap_or(false) {
+    if RE_FORMULA_PAREN_ONLY.is_match(input).unwrap_or(false) {
         return Ok(None);
     }
-    let re = Regex::new(
-        r"^(?:[a-z]|(?:[0-9\ \+\-\,\.\(\)]+[a-z])+[0-9\ \+\-\,\.\(\)]*|(?:[a-z][0-9\ \+\-\,\.\(\)]+)+[a-z]?)",
-    )
-    .unwrap();
-    Ok(re.find(input).ok().flatten().map(|m| PatternHit {
+    Ok(RE_FORMULA_MAIN.find(input).ok().flatten().map(|m| PatternHit {
         token: MatchToken::S(m.as_str().to_string()),
         remainder: input[m.end()..].to_string(),
     }))

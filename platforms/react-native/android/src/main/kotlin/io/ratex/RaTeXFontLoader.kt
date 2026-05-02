@@ -81,10 +81,26 @@ object RaTeXFontLoader {
 
     /**
      * Get cached Typeface for a font ID (e.g. "Main-Regular", "Math-Italic").
-     * Returns null if not loaded; Renderer will then draw placeholder.
+     * For CJK/emoji fallback IDs that have no bundled KaTeX font, resolves to the
+     * system default Typeface which has broad Unicode coverage on all Android versions.
+     * Returns null if not loaded and not a known fallback; Renderer will skip drawing.
      */
     @JvmStatic
-    fun getTypeface(fontId: String): Typeface? = cache[fontId]
+    fun getTypeface(fontId: String): Typeface? {
+        cache[fontId]?.let { return it }
+        val systemFallback = resolveSystemFallback(fontId) ?: return null
+        cache.putIfAbsent(fontId, systemFallback)
+        return systemFallback
+    }
+
+    /**
+     * Map CJK/emoji font IDs to [Typeface.DEFAULT], which provides system CJK + emoji
+     * coverage on all Android versions (Noto / Roboto / HarmonyOS Sans / MiLan Pro).
+     */
+    private fun resolveSystemFallback(fontId: String): Typeface? = when (fontId) {
+        "CJK-Regular", "CJK-Fallback", "Emoji-Fallback" -> Typeface.DEFAULT
+        else -> null
+    }
 
     /** Clear cache (e.g. for tests). */
     @JvmStatic

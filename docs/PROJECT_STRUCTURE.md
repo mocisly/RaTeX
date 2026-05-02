@@ -27,6 +27,7 @@ RaTeX/
 │   ├── ratex-parser/             # Token stream → ParseNode AST
 │   ├── ratex-layout/             # AST → LayoutBox → DisplayList
 │   ├── ratex-katex-fonts/        # KaTeX TTF blobs for embed-fonts (crates.io–safe path)
+│   ├── ratex-font-loader/        # Shared lazy font loading/cache for PNG/SVG/PDF
 │   ├── ratex-ffi/                # C ABI: LaTeX → DisplayList JSON (+ Android JNI)
 │   ├── ratex-render/             # DisplayList → PNG (tiny-skia, server-side)
 │   ├── ratex-wasm/               # WASM: LaTeX → DisplayList JSON (browser)
@@ -87,6 +88,7 @@ members = [
     "crates/ratex-parser",
     "crates/ratex-layout",
     "crates/ratex-katex-fonts",
+    "crates/ratex-font-loader",
     "crates/ratex-ffi",
     "crates/ratex-render",
     "crates/ratex-svg",
@@ -128,6 +130,7 @@ serde_json = "1.0"
 | **ratex-parser** | Token stream → ParseNode AST (macro expansion, functions); auto-numbering for `equation` / `align` / `gather` / `alignat` (non-starred) and trailing-row `\tag` / `\nonumber` / `\notag` |
 | **ratex-layout** | AST → LayoutBox tree → `to_display_list` → DisplayList |
 | **ratex-katex-fonts** | Bundled KaTeX `.ttf` files + embed API; optional dep for `ratex-svg` / `ratex-render` / `ratex-pdf` `embed-fonts` |
+| **ratex-font-loader** | Shared lazy font source/cache planner for PNG/SVG/PDF; cache entries are keyed by embedded/directory/system source |
 | **ratex-ffi** | C ABI: `ratex_parse_and_layout` → DisplayList JSON; Android `jni` module when targeting Android |
 | **ratex-render** | DisplayList → PNG via tiny-skia + ab_glyph (server/CI); `embed-fonts` uses `ratex-katex-fonts` |
 | **ratex-wasm** | WASM: parse + layout → DisplayList JSON for browser |

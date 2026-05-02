@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use ab_glyph::Font as _;
 use pdf_writer::{types::*, Filter, Finish, Name, Pdf, Ref, Str};
 use ratex_font::FontId;
+use ratex_font_loader::FontSet;
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::raw::FontRef as SfFontRef;
@@ -12,80 +13,8 @@ use skrifa::raw::TableProvider;
 use skrifa::{GlyphId, MetadataProvider};
 use subsetter::GlyphRemapper;
 
-/// Raw TTF bytes keyed by FontId.
-pub(crate) type RawFontData = HashMap<FontId, Vec<u8>>;
-
-/// The 19 KaTeX font faces.
-pub(crate) const FONT_MAP: &[(FontId, &str)] = &[
-    (FontId::MainRegular, "KaTeX_Main-Regular.ttf"),
-    (FontId::MainBold, "KaTeX_Main-Bold.ttf"),
-    (FontId::MainItalic, "KaTeX_Main-Italic.ttf"),
-    (FontId::MainBoldItalic, "KaTeX_Main-BoldItalic.ttf"),
-    (FontId::MathItalic, "KaTeX_Math-Italic.ttf"),
-    (FontId::MathBoldItalic, "KaTeX_Math-BoldItalic.ttf"),
-    (FontId::AmsRegular, "KaTeX_AMS-Regular.ttf"),
-    (FontId::CaligraphicRegular, "KaTeX_Caligraphic-Regular.ttf"),
-    (FontId::FrakturRegular, "KaTeX_Fraktur-Regular.ttf"),
-    (FontId::FrakturBold, "KaTeX_Fraktur-Bold.ttf"),
-    (FontId::SansSerifRegular, "KaTeX_SansSerif-Regular.ttf"),
-    (FontId::SansSerifBold, "KaTeX_SansSerif-Bold.ttf"),
-    (FontId::SansSerifItalic, "KaTeX_SansSerif-Italic.ttf"),
-    (FontId::ScriptRegular, "KaTeX_Script-Regular.ttf"),
-    (FontId::TypewriterRegular, "KaTeX_Typewriter-Regular.ttf"),
-    (FontId::Size1Regular, "KaTeX_Size1-Regular.ttf"),
-    (FontId::Size2Regular, "KaTeX_Size2-Regular.ttf"),
-    (FontId::Size3Regular, "KaTeX_Size3-Regular.ttf"),
-    (FontId::Size4Regular, "KaTeX_Size4-Regular.ttf"),
-];
-
-/// Load all KaTeX TTF fonts.
-#[allow(unused_variables)]
-pub(crate) fn load_all_fonts(font_dir: &str) -> Result<RawFontData, String> {
-    let mut data = HashMap::new();
-
-    #[cfg(not(feature = "embed-fonts"))]
-    {
-        let dir = std::path::Path::new(font_dir);
-        for (id, filename) in FONT_MAP {
-            let path = dir.join(filename);
-            if path.exists() {
-                let bytes = std::fs::read(&path)
-                    .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
-                data.insert(*id, bytes);
-            }
-        }
-        if data.is_empty() {
-            return Err(format!("No fonts found in {font_dir}"));
-        }
-    }
-
-    #[cfg(feature = "embed-fonts")]
-    {
-        for (id, filename) in FONT_MAP {
-            let cow = ratex_katex_fonts::ttf_bytes(filename)
-                .ok_or_else(|| format!("Missing embedded font {filename}"))?;
-            data.insert(*id, cow.to_vec());
-        }
-    }
-
-    // Load system Unicode font for CJK/fallback glyphs.
-    if let Some(cjk_bytes) = ratex_unicode_font::load_unicode_font() {
-        data.entry(FontId::CjkRegular)
-            .or_insert_with(|| cjk_bytes.to_vec());
-    }
-    // Secondary system fallback for characters the primary CJK font doesn't cover
-    // (e.g. emoji when RATEX_UNICODE_FONT points to a CJK-only font).
-    if let Some(fb_bytes) = ratex_unicode_font::load_fallback_font() {
-        data.entry(FontId::CjkFallback)
-            .or_insert_with(|| fb_bytes.to_vec());
-    }
-    if let Some(emoji_bytes) = ratex_unicode_font::load_emoji_font() {
-        data.entry(FontId::EmojiFallback)
-            .or_insert_with(|| emoji_bytes.to_vec());
-    }
-
-    Ok(data)
-}
+/// Loaded TTF bytes keyed by FontId.
+pub(crate) type RawFontData = FontSet;
 
 /// `ab_glyph` / OpenType cmap (same stack as PNG/SVG).
 fn resolve_glyph_id_abglyph(raw_bytes: &[u8], font_id: FontId, char_code: u32) -> Option<u16> {
@@ -188,7 +117,8 @@ pub(crate) fn resolve_pdf_glyph(
                 if font_id == FontId::EmojiFallback {
                     return Some((font_id, gid));
                 }
-            } else if font_id != FontId::CjkRegular || glyph_has_nonempty_outline(bytes, font_id, gid)
+            } else if font_id != FontId::CjkRegular
+                || glyph_has_nonempty_outline(bytes, font_id, gid)
             {
                 return Some((font_id, gid));
             }
@@ -303,10 +233,7 @@ pub(crate) fn collect_glyph_usage(
                         .or_insert(glyph_em);
                     continue;
                 }
-                usage_map
-                    .entry(face)
-                    .or_default()
-                    .insert((gid, *char_code));
+                usage_map.entry(face).or_default().insert((gid, *char_code));
             }
         }
     }
@@ -355,11 +282,7 @@ pub(crate) fn embed_emoji_rasters(
         if w != u32::from(strike.width) || h != u32::from(strike.height) {
             return Err(format!(
                 "PNG size mismatch for U+{:04X}: got {}x{}, expected {}x{}",
-                u.char_code,
-                w,
-                h,
-                strike.width,
-                strike.height
+                u.char_code, w, h, strike.width, strike.height
             ));
         }
 
@@ -461,8 +384,7 @@ pub(crate) fn embed_fonts(
             .map_err(|e| format!("Subset error for {:?}: {e}", usage.font_id))?;
 
         // Compress the subset.
-        let compressed =
-            miniz_oxide::deflate::compress_to_vec_zlib(&subsetted, 6);
+        let compressed = miniz_oxide::deflate::compress_to_vec_zlib(&subsetted, 6);
 
         // Read font metrics via skrifa.
         let sf = SfFontRef::from_index(raw, skrifa_collection_index(usage.font_id))
@@ -529,12 +451,11 @@ pub(crate) fn embed_fonts(
             .base_font(Name(base_name.as_bytes()))
             .default_width(0.0)
             .font_descriptor(descriptor_ref);
-        cid_font
-            .system_info(pdf_writer::types::SystemInfo {
-                registry: Str(b"Adobe"),
-                ordering: Str(b"Identity"),
-                supplement: 0,
-            });
+        cid_font.system_info(pdf_writer::types::SystemInfo {
+            registry: Str(b"Adobe"),
+            ordering: Str(b"Identity"),
+            supplement: 0,
+        });
 
         // W array (widths per CID).
         if !widths.is_empty() {
@@ -645,12 +566,14 @@ mod macos_cjk_pdf_tests {
     fn resolve_pdf_glyph_falls_back_for_missing_sc_in_applegothic() {
         let ag = std::fs::read(APPLE_GOTHIC).expect("AppleGothic");
         let au = std::fs::read(ARIAL_UNICODE).expect("Arial Unicode");
-        let main_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fonts/KaTeX_Main-Regular.ttf");
+        let main_path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fonts/KaTeX_Main-Regular.ttf");
         let main = std::fs::read(main_path).expect("KaTeX_Main-Regular");
         let mut data = HashMap::new();
         data.insert(FontId::MainRegular, main);
         data.insert(FontId::CjkRegular, ag);
         data.insert(FontId::CjkFallback, au);
+        let data: RawFontData = data.into();
         for cp in [0x6C27u32, 0x78B3u32] {
             let r = resolve_pdf_glyph(&data, "CJK-Regular", cp);
             assert!(
@@ -672,6 +595,7 @@ mod macos_cjk_pdf_tests {
         data.insert(FontId::MainRegular, main);
         data.insert(FontId::CjkRegular, ag);
         data.insert(FontId::EmojiFallback, emoji.to_vec());
+        let data: RawFontData = data.into();
         let r = resolve_pdf_glyph(&data, "CJK-Regular", 0x1F600);
         assert!(
             matches!(r, Some((FontId::EmojiFallback, _))),

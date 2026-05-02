@@ -6,6 +6,11 @@ use crate::FontId;
 /// used by bundled KaTeX font metrics (`fontMetricsData`) and **`.ttf` cmaps** (glyphs live at ASCII
 /// letter/digit slots, not at the Unicode scalar).
 pub fn font_and_metric_for_mathematical_alphanumeric(cp: u32) -> Option<(FontId, u32)> {
+    // All math alphanumeric symbols are U+1D400–U+1D7FF (way above ASCII).
+    // Early exit for ASCII saves 9+ range checks per glyph in the hot path.
+    if cp <= 0x7F {
+        return None;
+    }
     const LETTERS52: u32 = 52;
     const BASES_LETTERS: &[(u32, FontId)] = &[
         (0x1D400, FontId::MainBold),       // bold

@@ -2,17 +2,18 @@ use std::collections::HashMap;
 
 use ab_glyph::{Font, FontRef};
 use ratex_font::FontId;
+use ratex_font_loader::FontSet;
 use ratex_types::color::Color;
 use ratex_types::display_item::{DisplayItem, DisplayList};
 use tiny_skia::{
-    FilterQuality, FillRule, Paint, PathBuilder, Pixmap, PixmapPaint, Stroke, Transform,
+    FillRule, FilterQuality, Paint, PathBuilder, Pixmap, PixmapPaint, Stroke, Transform,
 };
 
 pub struct RenderOptions {
     pub font_size: f32,
     pub padding: f32,
-    /// Directory containing KaTeX `*.ttf` files (see `load_all_fonts`). Each file that exists is
-    /// loaded; missing files (e.g. no `KaTeX_Fraktur-Bold.ttf`) are skipped and that face falls back.
+    /// Directory containing KaTeX `*.ttf` files. Required KaTeX faces are loaded lazily;
+    /// rendering fails if a face referenced by the display list is missing.
     pub font_dir: String,
     /// Multiplies pixels-per-em (and padding) so the same layout renders at higher resolution
     /// (e.g. 2.0 to align RaTeX PNG pixel density with Puppeteer `deviceScaleFactor: 2` refs).
@@ -52,9 +53,53 @@ pub fn render_to_png(
 
     pixmap.fill(tiny_skia::Color::WHITE);
 
-    let font_data = load_all_fonts(&options.font_dir)?;
-    let font_cache = build_font_cache(&font_data)?;
+    // Lazy font loading is shared across renderers and source-aware by font_dir.
+    render_with_fonts(&mut pixmap, display_list, options, em_px, pad_px, dpr)?;
 
+    encode_png(&pixmap)
+}
+
+/// Load fonts lazily and render the DisplayList.
+fn render_with_fonts(
+    pixmap: &mut Pixmap,
+    display_list: &DisplayList,
+    options: &RenderOptions,
+    em_px: f32,
+    pad_px: f32,
+    dpr: f32,
+) -> Result<(), String> {
+    let fonts = ratex_font_loader::load_fonts_for_items(&options.font_dir, &display_list.items)?;
+    let font_refs = build_font_refs(&fonts)?;
+    render_display_list(pixmap, display_list, &font_refs, em_px, pad_px, dpr);
+    Ok(())
+}
+
+/// Build a `FontId → FontRef` map from the raw font data (borrowed from the cache lock).
+fn build_font_refs(data: &FontSet) -> Result<HashMap<FontId, FontRef<'_>>, String> {
+    let mut font_refs = HashMap::new();
+    for (id, bytes) in data.iter() {
+        let font = FontRef::try_from_slice_and_index(bytes, sfnt_collection_index(*id))
+            .map_err(|e| format!("Failed to parse font {:?}: {}", id, e))?;
+        font_refs.insert(*id, font);
+    }
+
+    if !font_refs.contains_key(&FontId::MainRegular) {
+        return Err("Main-Regular font not found".to_string());
+    }
+
+    Ok(font_refs)
+}
+
+/// Render all items in the DisplayList using the given font cache.
+fn render_display_list(
+    pixmap: &mut Pixmap,
+    display_list: &DisplayList,
+    font_cache: &HashMap<FontId, FontRef<'_>>,
+    em_px: f32,
+    pad_px: f32,
+    dpr: f32,
+) {
+    let mut font_id_cache: HashMap<&str, FontId> = HashMap::new();
     for item in &display_list.items {
         match item {
             DisplayItem::GlyphPath {
@@ -63,18 +108,20 @@ pub fn render_to_png(
                 scale,
                 font,
                 char_code,
-                commands: _,
                 color,
             } => {
                 let glyph_em = em_px * *scale as f32;
+                let font_id = *font_id_cache
+                    .entry(font.as_str())
+                    .or_insert_with(|| FontId::parse(font).unwrap_or(FontId::MainRegular));
                 render_glyph(
-                    &mut pixmap,
+                    pixmap,
                     *x as f32 * em_px + pad_px,
                     *y as f32 * em_px + pad_px,
-                    font,
+                    font_id,
                     *char_code,
                     color,
-                    &font_cache,
+                    font_cache,
                     glyph_em,
                 );
             }
@@ -87,7 +134,7 @@ pub fn render_to_png(
                 dashed,
             } => {
                 render_line(
-                    &mut pixmap,
+                    pixmap,
                     *x as f32 * em_px + pad_px,
                     *y as f32 * em_px + pad_px,
                     *width as f32 * em_px,
@@ -104,7 +151,7 @@ pub fn render_to_png(
                 color,
             } => {
                 render_rect(
-                    &mut pixmap,
+                    pixmap,
                     *x as f32 * em_px + pad_px,
                     *y as f32 * em_px + pad_px,
                     *width as f32 * em_px,
@@ -120,7 +167,7 @@ pub fn render_to_png(
                 color,
             } => {
                 render_path(
-                    &mut pixmap,
+                    pixmap,
                     *x as f32 * em_px + pad_px,
                     *y as f32 * em_px + pad_px,
                     commands,
@@ -132,79 +179,6 @@ pub fn render_to_png(
             }
         }
     }
-
-    encode_png(&pixmap)
-}
-
-/// Load KaTeX TTFs from disk. Only existing paths are inserted; callers should point [RenderOptions::font_dir]
-/// at a folder that includes every face the layout may emit (e.g. repo root `fonts/`).
-#[allow(unused_variables)]
-fn load_all_fonts(font_dir: &str) -> Result<HashMap<FontId, Vec<u8>>, String> {
-    let mut data = HashMap::new();
-    let font_map = [
-        (FontId::MainRegular, "KaTeX_Main-Regular.ttf"),
-        (FontId::MainBold, "KaTeX_Main-Bold.ttf"),
-        (FontId::MainItalic, "KaTeX_Main-Italic.ttf"),
-        (FontId::MainBoldItalic, "KaTeX_Main-BoldItalic.ttf"),
-        (FontId::MathItalic, "KaTeX_Math-Italic.ttf"),
-        (FontId::MathBoldItalic, "KaTeX_Math-BoldItalic.ttf"),
-        (FontId::AmsRegular, "KaTeX_AMS-Regular.ttf"),
-        (FontId::CaligraphicRegular, "KaTeX_Caligraphic-Regular.ttf"),
-        (FontId::FrakturRegular, "KaTeX_Fraktur-Regular.ttf"),
-        (FontId::FrakturBold, "KaTeX_Fraktur-Bold.ttf"),
-        (FontId::SansSerifRegular, "KaTeX_SansSerif-Regular.ttf"),
-        (FontId::SansSerifBold, "KaTeX_SansSerif-Bold.ttf"),
-        (FontId::SansSerifItalic, "KaTeX_SansSerif-Italic.ttf"),
-        (FontId::ScriptRegular, "KaTeX_Script-Regular.ttf"),
-        (FontId::TypewriterRegular, "KaTeX_Typewriter-Regular.ttf"),
-        (FontId::Size1Regular, "KaTeX_Size1-Regular.ttf"),
-        (FontId::Size2Regular, "KaTeX_Size2-Regular.ttf"),
-        (FontId::Size3Regular, "KaTeX_Size3-Regular.ttf"),
-        (FontId::Size4Regular, "KaTeX_Size4-Regular.ttf"),
-    ];
-
-    #[cfg(not(feature = "embed-fonts"))]
-    {
-        let dir = std::path::Path::new(font_dir);
-        for (id, filename) in &font_map {
-            let path = dir.join(filename);
-            if path.exists() {
-                let bytes = std::fs::read(&path)
-                    .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
-                data.insert(*id, bytes);
-            }
-        }
-
-        if data.is_empty() {
-            return Err(format!("No fonts found in {font_dir}"));
-        }
-    }
-
-    #[cfg(feature = "embed-fonts")]
-    {
-        for (id, filename) in &font_map {
-            let font = ratex_katex_fonts::ttf_bytes(filename)
-                .ok_or_else(|| format!("Failed to get embedded font {filename}"))?;
-            data.insert(*id, font.to_vec());
-        }
-    }
-
-    // Load system Unicode font for CJK/fallback glyphs.
-    if let Some(cjk_bytes) = ratex_unicode_font::load_unicode_font() {
-        data.entry(FontId::CjkRegular)
-            .or_insert_with(|| cjk_bytes.to_vec());
-    }
-    // Secondary system fallback for characters the primary CJK font doesn't cover.
-    if let Some(fb_bytes) = ratex_unicode_font::load_fallback_font() {
-        data.entry(FontId::CjkFallback)
-            .or_insert_with(|| fb_bytes.to_vec());
-    }
-    if let Some(emoji_bytes) = ratex_unicode_font::load_emoji_font() {
-        data.entry(FontId::EmojiFallback)
-            .or_insert_with(|| emoji_bytes.to_vec());
-    }
-
-    Ok(data)
 }
 
 fn sfnt_collection_index(id: FontId) -> u32 {
@@ -214,16 +188,6 @@ fn sfnt_collection_index(id: FontId) -> u32 {
         FontId::CjkFallback => ratex_unicode_font::fallback_font_face_index().unwrap_or(0),
         _ => 0,
     }
-}
-
-fn build_font_cache(data: &HashMap<FontId, Vec<u8>>) -> Result<HashMap<FontId, FontRef<'_>>, String> {
-    let mut cache = HashMap::new();
-    for (id, bytes) in data {
-        let font = FontRef::try_from_slice_and_index(bytes, sfnt_collection_index(*id))
-            .map_err(|e| format!("Failed to parse font {:?}: {}", id, e))?;
-        cache.insert(*id, font);
-    }
-    Ok(cache)
 }
 
 /// After `.notdef` or a cmap slot with **no drawable outline** (common for emoji in text fonts),
@@ -247,14 +211,40 @@ fn try_system_unicode_fallback(
     if !skip_main_regular {
         if let Some(fallback) = font_cache.get(&FontId::MainRegular) {
             let fid = fallback.glyph_id(ch);
-            if fid.0 != 0 && render_glyph_with_font(pixmap, px, py, fallback, fid, color, em) {
+            if fid.0 != 0
+                && render_glyph_with_font(
+                    pixmap,
+                    px,
+                    py,
+                    FontGlyph {
+                        font_id: FontId::MainRegular,
+                        font: fallback,
+                        glyph_id: fid,
+                    },
+                    color,
+                    em,
+                )
+            {
                 return true;
             }
         }
     }
     if let Some(cjk_font) = font_cache.get(&FontId::CjkRegular) {
         let fid = cjk_font.glyph_id(ch);
-        if fid.0 != 0 && render_glyph_with_font(pixmap, px, py, cjk_font, fid, color, em) {
+        if fid.0 != 0
+            && render_glyph_with_font(
+                pixmap,
+                px,
+                py,
+                FontGlyph {
+                    font_id: FontId::CjkRegular,
+                    font: cjk_font,
+                    glyph_id: fid,
+                },
+                color,
+                em,
+            )
+        {
             return true;
         }
     }
@@ -263,7 +253,20 @@ fn try_system_unicode_fallback(
     }
     if let Some(fb_font) = font_cache.get(&FontId::CjkFallback) {
         let fid = fb_font.glyph_id(ch);
-        if fid.0 != 0 && render_glyph_with_font(pixmap, px, py, fb_font, fid, color, em) {
+        if fid.0 != 0
+            && render_glyph_with_font(
+                pixmap,
+                px,
+                py,
+                FontGlyph {
+                    font_id: FontId::CjkFallback,
+                    font: fb_font,
+                    glyph_id: fid,
+                },
+                color,
+                em,
+            )
+        {
             return true;
         }
     }
@@ -288,7 +291,20 @@ fn try_emoji_vector_then_bitmap(
     }
     if let Some(emoji_font) = font_cache.get(&FontId::EmojiFallback) {
         let eid = emoji_font.glyph_id(ch);
-        if eid.0 != 0 && render_glyph_with_font(pixmap, px, py, emoji_font, eid, color, em) {
+        if eid.0 != 0
+            && render_glyph_with_font(
+                pixmap,
+                px,
+                py,
+                FontGlyph {
+                    font_id: FontId::EmojiFallback,
+                    font: emoji_font,
+                    glyph_id: eid,
+                },
+                color,
+                em,
+            )
+        {
             return true;
         }
     }
@@ -300,13 +316,12 @@ fn render_glyph(
     pixmap: &mut Pixmap,
     px: f32,
     py: f32,
-    font_name: &str,
+    font_id: FontId,
     char_code: u32,
     color: &Color,
     font_cache: &HashMap<FontId, FontRef<'_>>,
     em: f32,
 ) {
-    let font_id = FontId::parse(font_name).unwrap_or(FontId::MainRegular);
     let font = match font_cache.get(&font_id) {
         Some(f) => f,
         None => match font_cache.get(&FontId::MainRegular) {
@@ -327,13 +342,35 @@ fn render_glyph(
         if try_blit_emoji_raster_fallback(pixmap, px, py, em, ch) {
             return;
         }
-        let _ = render_glyph_with_font(pixmap, px, py, font, glyph_id, color, em);
+        let _ = render_glyph_with_font(
+            pixmap,
+            px,
+            py,
+            FontGlyph {
+                font_id,
+                font,
+                glyph_id,
+            },
+            color,
+            em,
+        );
         return;
     }
 
     // `RATEX_UNICODE_FONT` may map a codepoint to a non-.notdef glyph with no outlines; try system fallback.
     if font_id == FontId::CjkRegular {
-        if render_glyph_with_font(pixmap, px, py, font, glyph_id, color, em) {
+        if render_glyph_with_font(
+            pixmap,
+            px,
+            py,
+            FontGlyph {
+                font_id: FontId::CjkRegular,
+                font,
+                glyph_id,
+            },
+            color,
+            em,
+        ) {
             return;
         }
         if try_emoji_vector_then_bitmap(pixmap, px, py, ch, color, em, font_cache) {
@@ -341,7 +378,20 @@ fn render_glyph(
         }
         if let Some(fb_font) = font_cache.get(&FontId::CjkFallback) {
             let fid = fb_font.glyph_id(ch);
-            if fid.0 != 0 && render_glyph_with_font(pixmap, px, py, fb_font, fid, color, em) {
+            if fid.0 != 0
+                && render_glyph_with_font(
+                    pixmap,
+                    px,
+                    py,
+                    FontGlyph {
+                        font_id: FontId::CjkFallback,
+                        font: fb_font,
+                        glyph_id: fid,
+                    },
+                    color,
+                    em,
+                )
+            {
                 return;
             }
         }
@@ -349,14 +399,36 @@ fn render_glyph(
     }
 
     if font_id == FontId::CjkFallback {
-        if render_glyph_with_font(pixmap, px, py, font, glyph_id, color, em) {
+        if render_glyph_with_font(
+            pixmap,
+            px,
+            py,
+            FontGlyph {
+                font_id: FontId::CjkFallback,
+                font,
+                glyph_id,
+            },
+            color,
+            em,
+        ) {
             return;
         }
         let _ = try_emoji_vector_then_bitmap(pixmap, px, py, ch, color, em, font_cache);
         return;
     }
 
-    if render_glyph_with_font(pixmap, px, py, font, glyph_id, color, em) {
+    if render_glyph_with_font(
+        pixmap,
+        px,
+        py,
+        FontGlyph {
+            font_id,
+            font,
+            glyph_id,
+        },
+        color,
+        em,
+    ) {
         return;
     }
     // cmap had a non-zero GID but no `glyf` outline (e.g. blank text-font slot for emoji).
@@ -364,30 +436,37 @@ fn render_glyph(
     let _ = try_system_unicode_fallback(pixmap, px, py, ch, color, em, font_cache, skip_main);
 }
 
+struct FontGlyph<'a> {
+    font_id: FontId,
+    font: &'a FontRef<'a>,
+    glyph_id: ab_glyph::GlyphId,
+}
+
 fn render_glyph_with_font(
     pixmap: &mut Pixmap,
     px: f32,
     py: f32,
-    font: &FontRef<'_>,
-    glyph_id: ab_glyph::GlyphId,
+    g: FontGlyph<'_>,
     color: &Color,
     em: f32,
 ) -> bool {
-    let outline = match font.outline(glyph_id) {
-        Some(o) => o,
+    let curves = match ratex_font_loader::outline_cache::get_or_compute_outline(
+        g.font_id, g.font, g.glyph_id,
+    ) {
+        Some(c) => c,
         None => return false,
     };
-    if outline.curves.is_empty() {
+    if curves.is_empty() {
         return false;
     }
 
-    let units_per_em = font.units_per_em().unwrap_or(1000.0);
+    let units_per_em = g.font.units_per_em().unwrap_or(1000.0);
     let scale = em / units_per_em;
 
     let mut builder = PathBuilder::new();
     let mut last_end: Option<(f32, f32)> = None;
 
-    for curve in &outline.curves {
+    for curve in curves.iter() {
         use ab_glyph::OutlineCurve;
         let (start, end) = match curve {
             OutlineCurve::Line(p0, p1) => {
@@ -480,7 +559,13 @@ fn render_glyph_with_font(
 }
 
 /// Color emoji (sbix / CBDT / etc.) often have no `glyf` outlines; `ttf-parser` embedded strikes + PNG.
-fn try_blit_emoji_raster_fallback(pixmap: &mut Pixmap, px: f32, py: f32, em: f32, ch: char) -> bool {
+fn try_blit_emoji_raster_fallback(
+    pixmap: &mut Pixmap,
+    px: f32,
+    py: f32,
+    em: f32,
+    ch: char,
+) -> bool {
     let Some((bytes, idx)) = ratex_unicode_font::load_emoji_font_with_index() else {
         return false;
     };
@@ -571,7 +656,15 @@ fn raster_glyph_image_to_pixmap(img: &ttf_parser::RasterGlyphImage<'_>) -> Optio
     }
 }
 
-fn render_line(pixmap: &mut Pixmap, x: f32, y: f32, width: f32, thickness: f32, color: &Color, dashed: bool) {
+fn render_line(
+    pixmap: &mut Pixmap,
+    x: f32,
+    y: f32,
+    width: f32,
+    thickness: f32,
+    color: &Color,
+    dashed: bool,
+) {
     let t = thickness.max(1.0);
     let mut paint = Paint::default();
     paint.set_color_rgba8(
@@ -639,18 +732,39 @@ fn render_path(
     // be opposite.  Combining them into a single fill_path with FillRule::Winding
     // causes the shaft region to cancel out (net winding = 0 → unfilled).
     // Drawing each subpath independently avoids cross-component winding interactions.
-        if fill {
-            let mut start = 0;
-            for i in 1..commands.len() {
-                if matches!(commands[i], ratex_types::path_command::PathCommand::MoveTo { .. }) {
-                    render_path_segment(pixmap, x, y, &commands[start..i], fill, color, em, stroke_width_px);
-                    start = i;
-                }
+    if fill {
+        let mut start = 0;
+        for i in 1..commands.len() {
+            if matches!(
+                commands[i],
+                ratex_types::path_command::PathCommand::MoveTo { .. }
+            ) {
+                render_path_segment(
+                    pixmap,
+                    x,
+                    y,
+                    &commands[start..i],
+                    fill,
+                    color,
+                    em,
+                    stroke_width_px,
+                );
+                start = i;
             }
-            render_path_segment(pixmap, x, y, &commands[start..], fill, color, em, stroke_width_px);
-            return;
         }
-        render_path_segment(pixmap, x, y, commands, fill, color, em, stroke_width_px);
+        render_path_segment(
+            pixmap,
+            x,
+            y,
+            &commands[start..],
+            fill,
+            color,
+            em,
+            stroke_width_px,
+        );
+        return;
+    }
+    render_path_segment(pixmap, x, y, commands, fill, color, em, stroke_width_px);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -690,7 +804,12 @@ fn render_path_segment(
                     y + *cy as f32 * em,
                 );
             }
-            ratex_types::path_command::PathCommand::QuadTo { x1, y1, x: cx, y: cy } => {
+            ratex_types::path_command::PathCommand::QuadTo {
+                x1,
+                y1,
+                x: cx,
+                y: cy,
+            } => {
                 builder.quad_to(
                     x + *x1 as f32 * em,
                     y + *y1 as f32 * em,

@@ -77,8 +77,9 @@ pub fn render_to_pdf(
     let page_w = display_list.width * em + 2.0 * pad;
     let page_h = total_h * em + 2.0 * pad;
 
-    // Load raw font data.
-    let font_data = fonts::load_all_fonts(&options.font_dir).map_err(PdfError::Font)?;
+    // Load raw font data (lazy: only fonts referenced by this display list).
+    let font_data = ratex_font_loader::load_fonts_for_items(&options.font_dir, &display_list.items)
+        .map_err(PdfError::Font)?;
 
     // Pass 1: collect glyph usage (emoji → raster XObjects; other faces → subset fonts).
     let collected = fonts::collect_glyph_usage(&display_list.items, &font_data, em);
@@ -96,9 +97,8 @@ pub fn render_to_pdf(
     let embedded = fonts::embed_fonts(&mut pdf, &mut alloc, &collected.font_usages, &font_data)
         .map_err(PdfError::Font)?;
 
-    let emoji_embedded =
-        fonts::embed_emoji_rasters(&mut pdf, &mut alloc, &collected.emoji_rasters)
-            .map_err(PdfError::Font)?;
+    let emoji_embedded = fonts::embed_emoji_rasters(&mut pdf, &mut alloc, &collected.emoji_rasters)
+        .map_err(PdfError::Font)?;
 
     // Build lookup: FontId → EmbeddedFont index.
     let font_index: HashMap<FontId, usize> = embedded
@@ -316,8 +316,7 @@ fn emit_emoji_raster(
     let disp_h = f64::from(asset.height_px) * s;
     let top_x = px + f64::from(asset.strike_x) * s;
     let mut top_y = py - (f64::from(asset.strike_y) + f64::from(asset.height_px)) * s;
-    let center_strike =
-        (f64::from(asset.strike_y) + f64::from(asset.height_px) / 2.0) / ppm;
+    let center_strike = (f64::from(asset.strike_y) + f64::from(asset.height_px) / 2.0) / ppm;
     let axis = ratex_font::get_global_metrics(0).axis_height;
     top_y += (center_strike - axis) * glyph_em;
     let mut pdf_y_bl = page_h - top_y - disp_h;
@@ -485,13 +484,43 @@ fn emit_path(
         let mut start = 0;
         for i in 1..commands.len() {
             if matches!(commands[i], PathCommand::MoveTo { .. }) {
-                emit_path_segment(content, ox, oy, &commands[start..i], true, color, em, stroke_width, page_h);
+                emit_path_segment(
+                    content,
+                    ox,
+                    oy,
+                    &commands[start..i],
+                    true,
+                    color,
+                    em,
+                    stroke_width,
+                    page_h,
+                );
                 start = i;
             }
         }
-        emit_path_segment(content, ox, oy, &commands[start..], true, color, em, stroke_width, page_h);
+        emit_path_segment(
+            content,
+            ox,
+            oy,
+            &commands[start..],
+            true,
+            color,
+            em,
+            stroke_width,
+            page_h,
+        );
     } else {
-        emit_path_segment(content, ox, oy, commands, false, color, em, stroke_width, page_h);
+        emit_path_segment(
+            content,
+            ox,
+            oy,
+            commands,
+            false,
+            color,
+            em,
+            stroke_width,
+            page_h,
+        );
     }
 }
 
@@ -528,7 +557,14 @@ fn emit_path_segment(
                 content.line_to(px, py);
                 cur = (px, py);
             }
-            PathCommand::CubicTo { x1, y1, x2, y2, x, y } => {
+            PathCommand::CubicTo {
+                x1,
+                y1,
+                x2,
+                y2,
+                x,
+                y,
+            } => {
                 let end_x = (ox + x * em) as f32;
                 let end_y = flip_y(oy + y * em, page_h);
                 content.cubic_to(

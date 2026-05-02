@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 将根目录 VERSION 文件中的版本号同步到所有平台的版本声明文件：
-#   Cargo.toml（含 [workspace.package].version 与以 ratex- 开头的 path 依赖版本，如 ratex-katex-fonts）,
+#   Cargo.toml（含 [workspace.package].version 与以 ratex- 开头的 path 依赖版本，如 ratex-katex-fonts / ratex-font-loader）,
 #   platforms/flutter/pubspec.yaml,
 #   platforms/flutter/ios/ratex_flutter.podspec,
 #   platforms/flutter/android/build.gradle,
@@ -32,7 +32,8 @@ fi
 
 echo "Setting version to: $VER"
 
-# Cargo.toml：只改 [workspace.package].version 与以 ratex- 开头的依赖行中的 version，不改 phf/serde 等
+# Cargo.toml：只改 [workspace.package].version 与以 ratex- 开头的依赖行中的 version，
+# 覆盖新增的 workspace 内部 crate（例如 ratex-font-loader），不改 phf/serde 等
 sed -e '/^[[:space:]]*version = "/s/version = "[^"]*"/version = "'"$VER"'"/' \
     -e '/^ratex-/s/version = "[^"]*"/version = "'"$VER"'"/g' \
     Cargo.toml > Cargo.toml.tmp && mv Cargo.toml.tmp Cargo.toml

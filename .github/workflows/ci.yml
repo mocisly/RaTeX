@@ -26,6 +26,8 @@ jobs:
         run: cargo clippy --workspace -- -D warnings
       - name: Test
         run: cargo test --workspace
+      - name: Test ratex-font-loader (all features)
+        run: cargo test -p ratex-font-loader --all-features
       - name: Test ratex-pdf (all features, embed-fonts + CLI)
         run: cargo test -p ratex-pdf --all-features
       - name: Test ratex-svg (standalone + resvg golden)
@@ -34,10 +36,16 @@ jobs:
         run: cargo clippy -p ratex-svg --features standalone -- -D warnings
       - name: Check embed-fonts (crates.io–safe font paths)
         run: |
+          cargo check -p ratex-font-loader --features embed-fonts
           cargo check -p ratex-svg --features standalone,embed-fonts
           cargo check -p ratex-render --features embed-fonts
       - name: Package ratex-katex-fonts (verify tarball includes fonts/)
         run: cargo package -p ratex-katex-fonts
+      - name: Package ratex-font-loader
+        run: cargo package -p ratex-font-loader
+      - name: Bench smoke (compile + run, no timing assertion)
+        run: cargo test -p ratex-render --test bench_render --features embed-fonts -- --ignored --nocapture
+        continue-on-error: true
 
   web-wasm-build:
     runs-on: ubuntu-latest

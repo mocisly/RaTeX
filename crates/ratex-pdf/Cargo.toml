@@ -11,6 +11,7 @@ description = "PDF export for RaTeX DisplayList using pdf-writer"
 [dependencies]
 ratex-types = { workspace = true }
 ratex-font  = { workspace = true }
+ratex-font-loader = { workspace = true }
 pdf-writer  = "0.14"
 subsetter   = "0.2"
 skrifa      = "0.42"
@@ -25,7 +26,7 @@ ratex-katex-fonts = { workspace = true, optional = true }
 
 [features]
 default = []
-embed-fonts = ["dep:ratex-katex-fonts"]
+embed-fonts = ["dep:ratex-katex-fonts", "ratex-font-loader/embed-fonts"]
 cli = ["embed-fonts", "dep:ratex-layout", "dep:ratex-parser"]
 
 [[bin]]

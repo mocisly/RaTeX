@@ -36,12 +36,33 @@ fn smoke_fraction_renders_valid_pdf() {
     assert!(
         pdf.starts_with(b"%PDF-"),
         "expected %PDF- header, got {:?}",
-        pdf.get(..12).map(|s| std::str::from_utf8(s).unwrap_or("<binary>"))
+        pdf.get(..12)
+            .map(|s| std::str::from_utf8(s).unwrap_or("<binary>"))
     );
     assert!(
         pdf.len() > 256,
         "PDF unexpectedly small: {} bytes",
         pdf.len()
+    );
+}
+
+#[test]
+#[cfg(not(feature = "embed-fonts"))]
+fn missing_font_dir_returns_font_error() {
+    let nodes = parse("x").expect("parse LaTeX");
+    let lbox = layout(
+        &nodes,
+        &LayoutOptions::default().with_style(MathStyle::Display),
+    );
+    let list = to_display_list(&lbox);
+    let opts = PdfOptions {
+        font_dir: "/definitely/not/a/ratex/font/dir".to_string(),
+        ..Default::default()
+    };
+    let err = render_to_pdf(&list, &opts).expect_err("bad font_dir must fail");
+    assert!(
+        err.to_string().contains("Missing required font"),
+        "unexpected error: {err}"
     );
 }
 
