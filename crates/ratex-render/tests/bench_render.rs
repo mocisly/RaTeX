@@ -291,6 +291,7 @@ fn bench_render_100() {
     let render_opts = RenderOptions {
         font_size: 40.0,
         padding: 10.0,
+        background_color: ratex_types::color::Color::WHITE,
         font_dir,
         device_pixel_ratio: 1.0,
     };

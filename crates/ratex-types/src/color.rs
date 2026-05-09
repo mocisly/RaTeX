@@ -135,6 +135,7 @@ impl Color {
             "brown" => Some(Self::rgb(0.647, 0.165, 0.165)),
             "pink" => Some(Self::rgb(1.0, 0.753, 0.796)),
             "teal" => Some(Self::rgb(0.0, 0.502, 0.502)),
+            "transparent" => Some(Self::new(0.0, 0.0, 0.0, 0.0)),
             _ => None,
         }
     }
@@ -211,6 +212,10 @@ mod tests {
         let aqua = Color::from_name("aqua").unwrap();
         let cyan = Color::from_name("cyan").unwrap();
         assert_eq!(aqua, cyan);
+        assert_eq!(
+            Color::from_name("transparent"),
+            Some(Color::new(0.0, 0.0, 0.0, 0.0))
+        );
         assert!(Color::from_name("lime").is_some());
         assert!(Color::from_name("maroon").is_some());
         assert!(Color::from_name("navy").is_some());
