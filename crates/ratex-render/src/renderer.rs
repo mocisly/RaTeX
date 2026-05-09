@@ -12,6 +12,8 @@ use tiny_skia::{
 pub struct RenderOptions {
     pub font_size: f32,
     pub padding: f32,
+    /// Background fill color for the output PNG. Set alpha to 0.0 for transparency.
+    pub background_color: Color,
     /// Directory containing KaTeX `*.ttf` files. Required KaTeX faces are loaded lazily;
     /// rendering fails if a face referenced by the display list is missing.
     pub font_dir: String,
@@ -25,6 +27,7 @@ impl Default for RenderOptions {
         Self {
             font_size: 40.0,
             padding: 10.0,
+            background_color: Color::WHITE,
             font_dir: String::new(),
             device_pixel_ratio: 1.0,
         }
@@ -51,7 +54,7 @@ pub fn render_to_png(
     let mut pixmap = Pixmap::new(img_w, img_h)
         .ok_or_else(|| format!("Failed to create pixmap {}x{}", img_w, img_h))?;
 
-    pixmap.fill(tiny_skia::Color::WHITE);
+    pixmap.fill(to_tiny_skia_color(options.background_color));
 
     // Lazy font loading is shared across renderers and source-aware by font_dir.
     render_with_fonts(&mut pixmap, display_list, options, em_px, pad_px, dpr)?;
@@ -72,6 +75,16 @@ fn render_with_fonts(
     let font_refs = build_font_refs(&fonts)?;
     render_display_list(pixmap, display_list, &font_refs, em_px, pad_px, dpr);
     Ok(())
+}
+
+fn to_tiny_skia_color(color: Color) -> tiny_skia::Color {
+    tiny_skia::Color::from_rgba(
+        color.r.clamp(0.0, 1.0),
+        color.g.clamp(0.0, 1.0),
+        color.b.clamp(0.0, 1.0),
+        color.a.clamp(0.0, 1.0),
+    )
+    .unwrap_or(tiny_skia::Color::TRANSPARENT)
 }
 
 /// Build a `FontId → FontRef` map from the raw font data (borrowed from the cache lock).
@@ -689,10 +702,8 @@ fn render_line(
             }
             cur_x += period;
         }
-    } else {
-        if let Some(rect) = tiny_skia::Rect::from_xywh(x, y - t / 2.0, width, t) {
-            pixmap.fill_rect(rect, &paint, Transform::identity(), None);
-        }
+    } else if let Some(rect) = tiny_skia::Rect::from_xywh(x, y - t / 2.0, width, t) {
+        pixmap.fill_rect(rect, &paint, Transform::identity(), None);
     }
 }
 

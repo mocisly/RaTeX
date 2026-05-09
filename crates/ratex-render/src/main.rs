@@ -43,7 +43,7 @@ fn main() {
         .iter()
         .position(|a| a == "--color")
         .and_then(|i| args.get(i + 1))
-        .map(|value| parse_color_arg(value))
+        .map(|value| parse_color_arg("--color", value))
         .transpose()
         .unwrap_or_else(|msg| {
             eprintln!("ERR {}", msg);
@@ -51,11 +51,24 @@ fn main() {
         })
         .unwrap_or(Color::BLACK);
 
+    let background_color = args
+        .iter()
+        .position(|a| a == "--background-color")
+        .and_then(|i| args.get(i + 1))
+        .map(|value| parse_color_arg("--background-color", value))
+        .transpose()
+        .unwrap_or_else(|msg| {
+            eprintln!("ERR {}", msg);
+            std::process::exit(2);
+        })
+        .unwrap_or(Color::WHITE);
+
     std::fs::create_dir_all(&output_dir).expect("Failed to create output dir");
 
     let options = RenderOptions {
         font_size,
         padding: 10.0,
+        background_color,
         font_dir,
         device_pixel_ratio,
     };
@@ -121,11 +134,11 @@ fn default_font_dir() -> String {
     "fonts".to_string()
 }
 
-fn parse_color_arg(value: &str) -> Result<Color, String> {
+fn parse_color_arg(flag: &str, value: &str) -> Result<Color, String> {
     Color::parse(value).ok_or_else(|| {
         format!(
-            "invalid --color '{}': expected a named color, #rgb, #rrggbb, or [MODEL]value",
-            value
+            "invalid {} '{}': expected a named color, #rgb, #rrggbb, or [MODEL]value",
+            flag, value
         )
     })
 }
