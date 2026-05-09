@@ -32,7 +32,8 @@
     "jsSrcsDir": "src",
     "ios": {
       "componentProvider": {
-        "RaTeXView": "RaTeXViewComponentView"
+        "RaTeXView": "RaTeXViewComponentView",
+        "RaTeXInlineView": "RaTeXInlineViewComponentView"
       }
     },
     "android": {
