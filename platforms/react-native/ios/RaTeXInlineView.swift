@@ -40,6 +40,7 @@ public class RaTeXInlineView: UIView {
     private let layoutManager = NSLayoutManager()
     private let textContainer = NSTextContainer()
     private var lastReportedSize: CGSize = .zero
+    private var lastEmittedSize: CGSize?
     private var lastLayoutWidth: CGFloat = -1
 
     // MARK: - Init
@@ -97,12 +98,31 @@ public class RaTeXInlineView: UIView {
     // MARK: - Content size
 
     private func reportContentSizeIfNeeded() {
-        let usedRect = layoutManager.usedRect(for: textContainer)
-        let size = CGSize(width: ceil(usedRect.width), height: ceil(usedRect.height))
-        guard size != lastReportedSize, size.width > 0, size.height > 0 else { return }
+        let usedRect = textStorage.length > 0
+            ? layoutManager.usedRect(for: textContainer)
+            : .zero
+        let size = CGSize(
+            width: max(0, ceil(usedRect.width)),
+            height: max(0, ceil(usedRect.height))
+        )
+        updateContentSize(size)
+    }
+
+    private func updateContentSize(_ size: CGSize) {
+        let shouldInvalidateIntrinsicSize = size != lastReportedSize
         lastReportedSize = size
-        invalidateIntrinsicContentSize()
+        if shouldInvalidateIntrinsicSize {
+            invalidateIntrinsicContentSize()
+        }
+        guard size != lastEmittedSize else { return }
+        lastEmittedSize = size
         onContentSizeChange?(size.width, size.height)
+    }
+
+    public func resetContentSizeReporting() {
+        lastEmittedSize = nil
+        lastLayoutWidth = -1
+        setNeedsLayout()
     }
 
     // MARK: - Rebuild
@@ -113,6 +133,7 @@ public class RaTeXInlineView: UIView {
         textStorage.setAttributedString(attributed)
         lastLayoutWidth = -1
         lastReportedSize = .zero
+        lastEmittedSize = nil
         invalidateIntrinsicContentSize()
         setNeedsLayout()
         setNeedsDisplay()
@@ -169,20 +190,18 @@ public class RaTeXInlineView: UIView {
         var segments: [Segment] = []
         var current = ""
         var inFormula = false
-        var prevWasBackslash = false
+        var index = content.startIndex
 
-        for ch in content {
-            if prevWasBackslash {
-                prevWasBackslash = false
-                if ch == "$" {
+        while index < content.endIndex {
+            let ch = content[index]
+            let nextIndex = content.index(after: index)
+            if ch == "\\", nextIndex < content.endIndex, content[nextIndex] == "$" {
+                if inFormula {
+                    current.append("\\$")
+                } else {
                     current.append("$")
-                    continue
                 }
-                current.append("\\")
-            }
-
-            if ch == "\\" && !inFormula {
-                prevWasBackslash = true
+                index = content.index(after: nextIndex)
                 continue
             }
 
@@ -190,6 +209,8 @@ public class RaTeXInlineView: UIView {
                 if inFormula {
                     if !current.isEmpty {
                         segments.append(.formula(current))
+                    } else {
+                        segments.append(.text("$$"))
                     }
                     current = ""
                     inFormula = false
@@ -203,18 +224,13 @@ public class RaTeXInlineView: UIView {
             } else {
                 current.append(ch)
             }
+            index = nextIndex
         }
 
-        if prevWasBackslash {
-            current.append("\\")
-        }
-
-        if !current.isEmpty {
-            if inFormula {
-                segments.append(.text("$\(current)"))
-            } else {
-                segments.append(.text(current))
-            }
+        if inFormula {
+            segments.append(.text("$\(current)"))
+        } else if !current.isEmpty {
+            segments.append(.text(current))
         }
 
         return segments

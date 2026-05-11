@@ -47,10 +47,15 @@ public class RaTeXInlineRNView: UIView {
 
     // MARK: - Event callbacks
 
-    @objc public var onContentSizeChange: ((NSDictionary?) -> Void)?
+    @objc public var onContentSizeChange: ((NSDictionary?) -> Void)? {
+        didSet {
+            resetContentSizeReporting()
+        }
+    }
 
     @objc public func setContentSizeCallback(_ handler: ((CGFloat, CGFloat) -> Void)?) {
         contentSizeCallback = handler
+        resetContentSizeReporting()
     }
     private var contentSizeCallback: ((CGFloat, CGFloat) -> Void)?
 
@@ -70,6 +75,12 @@ public class RaTeXInlineRNView: UIView {
 
     public override var intrinsicContentSize: CGSize {
         innerView.intrinsicContentSize
+    }
+
+    @objc public func resetContentSizeReporting() {
+        innerView.resetContentSizeReporting()
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
     }
 
     // MARK: - Private

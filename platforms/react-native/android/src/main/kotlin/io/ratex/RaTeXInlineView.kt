@@ -129,7 +129,7 @@ class RaTeXInlineView @JvmOverloads constructor(
             currentSpannable = null
             staticLayout = null
             lastLayoutWidth = -1
-            lastReportedSize = Pair(0.0, 0.0)
+            reportContentSize(0.0, 0.0)
             requestLayout()
             invalidate()
             return
@@ -167,6 +167,10 @@ class RaTeXInlineView @JvmOverloads constructor(
 
         val widthDp = layout.width.toDouble() / density
         val heightDp = layout.height.toDouble() / density
+        reportContentSize(widthDp, heightDp)
+    }
+
+    private fun reportContentSize(widthDp: Double, heightDp: Double) {
         val size = Pair(widthDp, heightDp)
         if (size != lastReportedSize) {
             lastReportedSize = size
@@ -206,7 +210,7 @@ class RaTeXInlineView @JvmOverloads constructor(
                             SpannableStringBuilder.SPAN_EXCLUSIVE_EXCLUSIVE,
                         )
                     } else {
-                        builder.append("$${segment.content}$")
+                        builder.append("\$${segment.content}\$")
                     }
                 }
             }
@@ -226,20 +230,17 @@ class RaTeXInlineView @JvmOverloads constructor(
             val segments = mutableListOf<Segment>()
             val current = StringBuilder()
             var inFormula = false
-            var prevWasBackslash = false
+            var index = 0
 
-            for (ch in content) {
-                if (prevWasBackslash) {
-                    prevWasBackslash = false
-                    if (ch == '$') {
+            while (index < content.length) {
+                val ch = content[index]
+                if (ch == '\\' && index + 1 < content.length && content[index + 1] == '$') {
+                    if (inFormula) {
+                        current.append("\\$")
+                    } else {
                         current.append('$')
-                        continue
                     }
-                    current.append('\\')
-                }
-
-                if (ch == '\\' && !inFormula) {
-                    prevWasBackslash = true
+                    index += 2
                     continue
                 }
 
@@ -247,6 +248,8 @@ class RaTeXInlineView @JvmOverloads constructor(
                     if (inFormula) {
                         if (current.isNotEmpty()) {
                             segments.add(Segment.Formula(current.toString()))
+                        } else {
+                            segments.add(Segment.Text("\$\$"))
                         }
                         current.clear()
                         inFormula = false
@@ -260,18 +263,13 @@ class RaTeXInlineView @JvmOverloads constructor(
                 } else {
                     current.append(ch)
                 }
+                index += 1
             }
 
-            if (prevWasBackslash) {
-                current.append('\\')
-            }
-
-            if (current.isNotEmpty()) {
-                if (inFormula) {
-                    segments.add(Segment.Text("$$current"))
-                } else {
-                    segments.add(Segment.Text(current.toString()))
-                }
+            if (inFormula) {
+                segments.add(Segment.Text("\$$current"))
+            } else if (current.isNotEmpty()) {
+                segments.add(Segment.Text(current.toString()))
             }
 
             return segments

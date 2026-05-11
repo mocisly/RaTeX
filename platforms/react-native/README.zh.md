@@ -120,19 +120,20 @@ function Screen() {
 
 ### `<InlineTeX />`
 
-将包含 `$...$` 标记的混合字符串渲染为内联流式布局。文字和公式片段以 flex 行排列，`alignItems: 'center'` 使公式中线与周围文字自动对齐，无需手动计算偏移量。
+将包含 `$...$` 标记的混合字符串渲染为原生内联文本流。公式在 iOS 上通过 `NSTextAttachment` 嵌入，在 Android 上通过 `ReplacementSpan` 嵌入，因此换行、断词和基线对齐都交给平台文本排版引擎处理。
 
 **渲染流程：**
 
-1. 每个公式先在屏幕外（绝对定位、`opacity: 0`）通过 `onContentSizeChange` 测量其固有宽高。
-2. 所有公式测量完毕后，按实测尺寸渲染可见的 flex 行。
+1. 将 `content` 解析成文字和公式片段。转义美元符号（`\$`）保留为普通文本，未闭合或空的 `$` 分隔符会回退为普通文本。
+2. 公式片段使用原生 text attachment/span 参与内联排版，并上报测量后的内容高度用于动态布局。
 
 | 属性 | 类型 | 默认值 | 说明 |
 |-----|------|--------|------|
 | `content` | `string` | — | 包含 `$...$` 标记的文字字符串（必填）。 |
 | `fontSize` | `number` | `16` | 传给每个公式渲染器的字体大小（dp）。 |
 | `color` | `ColorValue` | — | 传给每个行内公式的默认颜色。显式 LaTeX 颜色仍然优先。 |
-| `textStyle` | `StyleProp<TextStyle>` | — | 应用于纯文字片段的样式。 |
+| `textStyle` | `StyleProp<TextStyle>` | — | 普通文字样式来源。目前会将 `color` 和 `fontSize` 应用到原生文本排版。 |
+| `style` | `StyleProp<ViewStyle>` | — | 原生内联容器的标准 React Native 样式。若未显式指定高度，会自动使用测量高度。 |
 
 > `InlineTeX` 会自动对所有公式传入 `displayMode={false}`——`$...$` 始终使用行内样式。
 

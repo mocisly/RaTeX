@@ -66,9 +66,10 @@ export function InlineTeX({
     return lineHeight;
   }, [textFontSize]);
 
-  const heightValue = contentSize
-    ? contentSize.height
-    : estimatedHeight;
+  const hasRenderableContent = content.trim().length > 0;
+  const heightValue = hasRenderableContent
+    ? (contentSize ? contentSize.height : estimatedHeight)
+    : 0;
 
   const resolvedStyle = hasHeight
     ? style

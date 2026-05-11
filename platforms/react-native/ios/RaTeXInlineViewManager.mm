@@ -115,6 +115,14 @@ inline UIColor *_Nullable RaTeXInlineUIColorFromSharedColor(const SharedColor &s
   [super updateProps:props oldProps:oldProps];
 }
 
+- (void)updateEventEmitter:(EventEmitter::Shared const &)eventEmitter
+{
+  [super updateEventEmitter:eventEmitter];
+  if (_nativeView) {
+    [_nativeView resetContentSizeReporting];
+  }
+}
+
 @end
 
 Class<RCTComponentViewProtocol> RaTeXInlineViewCls(void)

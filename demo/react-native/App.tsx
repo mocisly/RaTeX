@@ -195,7 +195,7 @@ export default function App() {
           <InlineTeX
             content={String.raw`Small: $E=mc^2$ and $\alpha + \beta = \gamma$.`}
             fontSize={12}
-            textStyle={{fontSize: 12, color: '#333'}}
+            textStyle={styles.inlineSmallText}
           />
         </View>
         <View style={styles.card}>
@@ -205,7 +205,7 @@ export default function App() {
           <InlineTeX
             content={String.raw`Large: $\int_0^1 x\,dx = \frac{1}{2}$ done.`}
             fontSize={24}
-            textStyle={{fontSize: 24, color: '#333'}}
+            textStyle={styles.inlineLargeText}
           />
         </View>
         <View style={styles.card}>
@@ -216,7 +216,7 @@ export default function App() {
             content={String.raw`Color test: $\nabla \times \mathbf{E} = -\frac{\partial \mathbf{B}}{\partial t}$ is Maxwell.`}
             fontSize={16}
             color="#2563eb"
-            textStyle={{fontSize: 16, color: '#dc2626'}}
+            textStyle={styles.inlineRedText}
           />
         </View>
 
@@ -286,4 +286,7 @@ const styles = StyleSheet.create({
   label: {fontSize: 13, color: '#555', marginBottom: 4},
   sectionTitle: {fontSize: 16, fontWeight: '600', color: '#333', marginTop: 4},
   inlineText: {fontSize: 14, color: '#333'},
+  inlineSmallText: {fontSize: 12, color: '#333'},
+  inlineLargeText: {fontSize: 24, color: '#333'},
+  inlineRedText: {fontSize: 16, color: '#dc2626'},
 });
