@@ -120,19 +120,20 @@ If you explicitly provide `style.width` and/or `style.height`, `RaTeXView` will 
 
 ### `<InlineTeX />`
 
-Renders a mixed string of plain text and `$...$` LaTeX formulas as a single inline flow. Text and formula segments are laid out in a flex row with `alignItems: 'center'`, so the formula centerline aligns with the surrounding text automatically — no manual offset required.
+Renders a mixed string of plain text and `$...$` LaTeX formulas as a single native text flow. Formulas are embedded with `NSTextAttachment` on iOS and `ReplacementSpan` on Android, so line wrapping, word breaking, and baseline alignment are handled by the platform text layout engine.
 
 **Rendering pipeline:**
 
-1. Each formula is first rendered off-screen (absolutely positioned, `opacity: 0`) to measure its intrinsic width and height via `onContentSizeChange`.
-2. Once all formulas are measured, the visible flex row is rendered with each formula at its exact measured size.
+1. `content` is parsed into text and formula segments. Escaped dollars (`\$`) stay as literal text, and unmatched or empty `$` delimiters fall back to plain text.
+2. Formula segments are rendered inline with native text attachments/spans and report measured content height for dynamic layout.
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `content` | `string` | — | Text string with `$...$` markers for inline LaTeX (required). |
 | `fontSize` | `number` | `16` | Font size passed to each formula renderer (dp). |
 | `color` | `ColorValue` | — | Default color passed to each inline formula. Explicit LaTeX colors still take precedence. |
-| `textStyle` | `StyleProp<TextStyle>` | — | Style applied to plain-text segments. |
+| `textStyle` | `StyleProp<TextStyle>` | — | Plain-text style source. `color` and `fontSize` are applied to native text layout. |
+| `style` | `StyleProp<ViewStyle>` | — | Standard React Native style for the native inline container. Height is measured automatically unless explicitly provided. |
 
 > `InlineTeX` automatically passes `displayMode={false}` to every formula it renders — `$...$` is always inline style.
 

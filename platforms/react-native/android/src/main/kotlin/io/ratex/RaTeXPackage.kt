@@ -12,5 +12,8 @@ class RaTeXPackage : ReactPackage {
         emptyList()
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
-        listOf<ViewManager<*, *>>(RaTeXViewManager(reactContext))
+        listOf<ViewManager<*, *>>(
+            RaTeXViewManager(reactContext),
+            RaTeXInlineViewManager(reactContext),
+        )
 }
