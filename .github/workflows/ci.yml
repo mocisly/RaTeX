@@ -41,8 +41,6 @@ jobs:
           cargo check -p ratex-render --features embed-fonts
       - name: Package ratex-katex-fonts (verify tarball includes fonts/)
         run: cargo package -p ratex-katex-fonts
-      - name: Package ratex-font-loader
-        run: cargo package -p ratex-font-loader
       - name: Bench smoke (compile + run, no timing assertion)
         run: cargo test -p ratex-render --test bench_render --features embed-fonts -- --ignored --nocapture
         continue-on-error: true
