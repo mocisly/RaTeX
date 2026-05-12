@@ -217,7 +217,7 @@ pub(crate) fn collect_glyph_usage(
             // Always collect sbix rasters for emoji / dingbat blocks when a color font is loaded,
             // independent of [`resolve_pdf_glyph`] (avoids edge cases where CJK/Main still "claim" a CP).
             if prefer_color_emoji_raster(*char_code)
-                && ratex_unicode_font::load_emoji_font().is_some()
+                && ratex_unicode_font::load_emoji_font_arc().is_some()
             {
                 emoji_max
                     .entry(*char_code)
@@ -590,11 +590,11 @@ mod macos_cjk_pdf_tests {
         let main_path =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fonts/KaTeX_Main-Regular.ttf");
         let main = std::fs::read(main_path).expect("KaTeX_Main-Regular");
-        let emoji = ratex_unicode_font::load_emoji_font().expect("system emoji font");
+        let emoji = ratex_unicode_font::load_emoji_font_arc().expect("system emoji font");
         let mut data = HashMap::new();
         data.insert(FontId::MainRegular, main);
         data.insert(FontId::CjkRegular, ag);
-        data.insert(FontId::EmojiFallback, emoji.to_vec());
+        data.insert(FontId::EmojiFallback, (*emoji).clone());
         let data: RawFontData = data.into();
         let r = resolve_pdf_glyph(&data, "CJK-Regular", 0x1F600);
         assert!(

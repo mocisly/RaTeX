@@ -7,7 +7,7 @@ use ratex_types::display_item::DisplayItem;
 
 pub mod outline_cache;
 
-pub type FontBytes = Arc<[u8]>;
+pub type FontBytes = Arc<Vec<u8>>;
 type CachedFont = Option<FontBytes>;
 
 const FONT_MAP: &[(FontId, &str)] = &[
@@ -55,7 +55,7 @@ pub struct FontSet {
 
 impl FontSet {
     pub fn get(&self, id: &FontId) -> Option<&[u8]> {
-        self.fonts.get(id).map(|bytes| bytes.as_ref())
+        self.fonts.get(id).map(|bytes| bytes.as_slice())
     }
 
     pub fn contains_key(&self, id: &FontId) -> bool {
@@ -63,7 +63,7 @@ impl FontSet {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&FontId, &[u8])> {
-        self.fonts.iter().map(|(id, bytes)| (id, bytes.as_ref()))
+        self.fonts.iter().map(|(id, bytes)| (id, bytes.as_slice()))
     }
 }
 
@@ -72,7 +72,7 @@ impl From<HashMap<FontId, Vec<u8>>> for FontSet {
         Self {
             fonts: fonts
                 .into_iter()
-                .map(|(id, bytes)| (id, Arc::<[u8]>::from(bytes)))
+                .map(|(id, bytes)| (id, Arc::new(bytes)))
                 .collect(),
         }
     }
@@ -174,10 +174,8 @@ pub fn load_fonts_for_plan(font_dir: &str, plan: &FontLoadPlan) -> Result<FontSe
             if cached.contains_key(&key) {
                 continue;
             }
-            cached.insert(
-                key,
-                load_font_bytes(font_dir, font_id)?.map(Arc::<[u8]>::from),
-            );
+            let loaded = load_font_bytes(font_dir, font_id)?;
+            cached.insert(key, loaded);
         }
         // Re-collect without clearing `out`: fonts already inserted during the
         // read-lock fast path stay in place (overwritten with identical Arc
@@ -255,17 +253,17 @@ fn normalize_font_dir(font_dir: &str) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
-fn load_font_bytes(font_dir: &str, font_id: FontId) -> Result<Option<Vec<u8>>, String> {
+fn load_font_bytes(font_dir: &str, font_id: FontId) -> Result<Option<FontBytes>, String> {
     match font_id {
-        FontId::CjkRegular => Ok(ratex_unicode_font::load_unicode_font().map(|b| b.to_vec())),
-        FontId::CjkFallback => Ok(ratex_unicode_font::load_fallback_font().map(|b| b.to_vec())),
-        FontId::EmojiFallback => Ok(ratex_unicode_font::load_emoji_font().map(|b| b.to_vec())),
+        FontId::CjkRegular => Ok(ratex_unicode_font::load_unicode_font_arc()),
+        FontId::CjkFallback => Ok(ratex_unicode_font::load_fallback_font_arc()),
+        FontId::EmojiFallback => Ok(ratex_unicode_font::load_emoji_font_arc()),
         _ => load_katex_font(font_dir, font_id),
     }
 }
 
 #[cfg(not(feature = "embed-fonts"))]
-fn load_katex_font(font_dir: &str, font_id: FontId) -> Result<Option<Vec<u8>>, String> {
+fn load_katex_font(font_dir: &str, font_id: FontId) -> Result<Option<FontBytes>, String> {
     let Some(filename) = FONT_MAP
         .iter()
         .find(|(id, _)| *id == font_id)
@@ -278,12 +276,12 @@ fn load_katex_font(font_dir: &str, font_id: FontId) -> Result<Option<Vec<u8>>, S
         return Ok(None);
     }
     std::fs::read(&path)
-        .map(Some)
+        .map(|bytes| Some(Arc::new(bytes)))
         .map_err(|e| format!("Failed to read {}: {e}", path.display()))
 }
 
 #[cfg(feature = "embed-fonts")]
-fn load_katex_font(_font_dir: &str, font_id: FontId) -> Result<Option<Vec<u8>>, String> {
+fn load_katex_font(_font_dir: &str, font_id: FontId) -> Result<Option<FontBytes>, String> {
     let Some(filename) = FONT_MAP
         .iter()
         .find(|(id, _)| *id == font_id)
@@ -291,7 +289,7 @@ fn load_katex_font(_font_dir: &str, font_id: FontId) -> Result<Option<Vec<u8>>, 
     else {
         return Ok(None);
     };
-    Ok(ratex_katex_fonts::ttf_bytes(filename).map(|cow| cow.to_vec()))
+    Ok(ratex_katex_fonts::ttf_bytes(filename).map(|cow| Arc::new(cow.into_owned())))
 }
 
 #[cfg(test)]

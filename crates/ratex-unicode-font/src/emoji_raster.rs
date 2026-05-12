@@ -19,8 +19,9 @@ pub struct EmojiRasterStrike {
 ///
 /// `glyph_em_px` is the requested em size in pixels (same convention as `ratex-render` pixmap).
 pub fn emoji_raster_for_char(ch: char, glyph_em_px: f32) -> Option<EmojiRasterStrike> {
-    let (bytes, idx) = super::load_emoji_font_with_index()?;
-    let face = Face::parse(bytes, idx).ok()?;
+    let bytes = super::load_emoji_font_arc()?;
+    let idx = super::emoji_font_face_index().unwrap_or(0);
+    let face = Face::parse(bytes.as_slice(), idx).ok()?;
     let gid = face.glyph_index(ch)?;
     let strike = glyph_em_px.round().clamp(8.0, 256.0) as u16;
     let img = face
