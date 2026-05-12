@@ -216,22 +216,41 @@ pub(crate) fn collect_glyph_usage(
             let glyph_em = (*scale * body_em) as f32;
             // Always collect sbix rasters for emoji / dingbat blocks when a color font is loaded,
             // independent of [`resolve_pdf_glyph`] (avoids edge cases where CJK/Main still "claim" a CP).
+            // BUT: only if the emoji font actually has PNG rasters (Windows COLR fonts don't).
             if prefer_color_emoji_raster(*char_code)
                 && ratex_unicode_font::load_emoji_font_arc().is_some()
             {
-                emoji_max
-                    .entry(*char_code)
-                    .and_modify(|m| *m = (*m).max(glyph_em))
-                    .or_insert(glyph_em);
-                continue;
-            }
-            if let Some((face, gid)) = resolve_pdf_glyph(font_data, font, *char_code) {
-                if face == FontId::EmojiFallback {
+                // Check if PNG raster is actually available before collecting as emoji
+                let ch = char::from_u32(*char_code);
+                let has_png = ch
+                    .and_then(|c| ratex_unicode_font::emoji_png_raster_for_char(c, glyph_em))
+                    .is_some();
+
+                if has_png {
                     emoji_max
                         .entry(*char_code)
                         .and_modify(|m| *m = (*m).max(glyph_em))
                         .or_insert(glyph_em);
                     continue;
+                }
+                // If no PNG available, fall through to vector outline rendering
+            }
+            if let Some((face, gid)) = resolve_pdf_glyph(font_data, font, *char_code) {
+                if face == FontId::EmojiFallback {
+                    // Check if PNG raster is available
+                    let ch = char::from_u32(*char_code);
+                    let has_png = ch
+                        .and_then(|c| ratex_unicode_font::emoji_png_raster_for_char(c, glyph_em))
+                        .is_some();
+
+                    if has_png {
+                        emoji_max
+                            .entry(*char_code)
+                            .and_modify(|m| *m = (*m).max(glyph_em))
+                            .or_insert(glyph_em);
+                        continue;
+                    }
+                    // If no PNG, treat as regular vector glyph
                 }
                 usage_map.entry(face).or_default().insert((gid, *char_code));
             }
@@ -266,6 +285,9 @@ pub(crate) fn collect_glyph_usage(
 }
 
 /// Write PNG sbix strikes as DeviceRGB image XObjects with an SMask for transparency.
+///
+/// Skips emoji that don't have PNG rasters (e.g., Windows COLR fonts) — they should have been
+/// filtered out by [`collect_glyph_usage`], but this provides a safety net.
 pub(crate) fn embed_emoji_rasters(
     pdf: &mut Pdf,
     alloc: &mut Ref,
@@ -275,8 +297,12 @@ pub(crate) fn embed_emoji_rasters(
     for (i, u) in usages.iter().enumerate() {
         let ch = char::from_u32(u.char_code)
             .ok_or_else(|| format!("invalid char code {}", u.char_code))?;
-        let strike = ratex_unicode_font::emoji_png_raster_for_char(ch, u.max_glyph_em_px)
-            .ok_or_else(|| format!("emoji PNG strike missing for U+{:04X}", u.char_code))?;
+        let Some(strike) = ratex_unicode_font::emoji_png_raster_for_char(ch, u.max_glyph_em_px)
+        else {
+            // No PNG raster available (e.g., Windows COLR emoji). Skip — should have been
+            // filtered by collect_glyph_usage, but this prevents a hard error.
+            continue;
+        };
 
         let (w, h, rgba) = decode_png_rgba8(&strike.data)?;
         if w != u32::from(strike.width) || h != u32::from(strike.height) {

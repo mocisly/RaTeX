@@ -387,13 +387,36 @@ fn emit_glyph(
     let pdf_x = px as f32;
     let pdf_y = flip_y(py, page_h);
 
+    // Emoji outline fallback has no KaTeX metrics; scale it to the 1.0em width that layout
+    // allocates for missing emoji so Windows vector fallback does not overflow.
+    let mut text_matrix_scale = 1.0;
+    if actual_fid == FontId::EmojiFallback {
+        if let Some(font_bytes) = font_data.get(&FontId::EmojiFallback) {
+            use ab_glyph::Font;
+            let idx = ratex_unicode_font::emoji_font_face_index().unwrap_or(0);
+            if let Ok(font) = ab_glyph::FontRef::try_from_slice_and_index(font_bytes, idx) {
+                let ch = char::from_u32(char_code).unwrap_or('\u{FFFD}');
+                let glyph_id = font.glyph_id(ch);
+                if glyph_id.0 != 0 {
+                    let actual_advance = font.h_advance_unscaled(glyph_id);
+                    let units_per_em = font.units_per_em().unwrap_or(1000.0);
+                    let actual_advance_em = actual_advance / units_per_em;
+                    let assumed_width = 1.0;
+                    if actual_advance_em > 0.01 && actual_advance_em > assumed_width * 1.01 {
+                        text_matrix_scale = assumed_width / actual_advance_em;
+                    }
+                }
+            }
+        }
+    }
+
     // CID as 2-byte big-endian.
     let cid_bytes = [(new_cid >> 8) as u8, (new_cid & 0xFF) as u8];
 
     set_fill_rgb(content, color);
     content.begin_text();
     content.set_font(Name(ef.res_name.as_bytes()), glyph_em);
-    content.set_text_matrix([1.0, 0.0, 0.0, 1.0, pdf_x, pdf_y]);
+    content.set_text_matrix([text_matrix_scale, 0.0, 0.0, text_matrix_scale, pdf_x, pdf_y]);
     content.show(Str(&cid_bytes));
     content.end_text();
 }
