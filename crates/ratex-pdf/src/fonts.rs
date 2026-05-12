@@ -265,7 +265,7 @@ pub(crate) fn collect_glyph_usage(
     }
 }
 
-/// Write PNG sbix strikes as opaque DeviceRGB image XObjects (alpha composited on white).
+/// Write PNG sbix strikes as DeviceRGB image XObjects with an SMask for transparency.
 pub(crate) fn embed_emoji_rasters(
     pdf: &mut Pdf,
     alloc: &mut Ref,
@@ -286,19 +286,34 @@ pub(crate) fn embed_emoji_rasters(
             ));
         }
 
-        // Composite onto white and emit a single opaque DeviceRGB stream. Many viewers mishandle
-        // `/SMask` on small Flate RGB images; this matches a white page and fixes "invisible" emoji.
         let mut rgb = Vec::with_capacity((w * h * 3) as usize);
+        let mut alpha = Vec::with_capacity((w * h) as usize);
+        let mut has_transparency = false;
         for p in rgba.chunks_exact(4) {
-            let a = p[3] as f32 / 255.0;
-            let r = (p[0] as f32 * a + 255.0 * (1.0 - a)).round() as u8;
-            let g = (p[1] as f32 * a + 255.0 * (1.0 - a)).round() as u8;
-            let b = (p[2] as f32 * a + 255.0 * (1.0 - a)).round() as u8;
-            rgb.extend_from_slice(&[r, g, b]);
+            rgb.extend_from_slice(&[p[0], p[1], p[2]]);
+            alpha.push(p[3]);
+            if p[3] != 255 {
+                has_transparency = true;
+            }
         }
         let encoded_rgb = miniz_oxide::deflate::compress_to_vec_zlib(&rgb, 6);
 
         let image_ref = alloc.bump();
+
+        let smask_ref = if has_transparency {
+            let r = alloc.bump();
+            let encoded_alpha = miniz_oxide::deflate::compress_to_vec_zlib(&alpha, 6);
+            let mut mask = pdf.image_xobject(r, &encoded_alpha);
+            mask.filter(Filter::FlateDecode);
+            mask.width(w as i32);
+            mask.height(h as i32);
+            mask.color_space().device_gray();
+            mask.bits_per_component(8);
+            mask.finish();
+            Some(r)
+        } else {
+            None
+        };
 
         let mut image = pdf.image_xobject(image_ref, &encoded_rgb);
         image.filter(Filter::FlateDecode);
@@ -306,6 +321,9 @@ pub(crate) fn embed_emoji_rasters(
         image.height(h as i32);
         image.color_space().device_rgb();
         image.bits_per_component(8);
+        if let Some(r) = smask_ref {
+            image.s_mask(r);
+        }
         image.finish();
 
         out.push(EmbeddedEmojiImage {
@@ -323,9 +341,9 @@ pub(crate) fn embed_emoji_rasters(
 }
 
 fn decode_png_rgba8(data: &[u8]) -> Result<(u32, u32, Vec<u8>), String> {
-    let dec = png::Decoder::new(std::io::Cursor::new(data));
+    let mut dec = png::Decoder::new(std::io::Cursor::new(data));
+    dec.set_transformations(png::Transformations::EXPAND);
     let mut reader = dec.read_info().map_err(|e| format!("png: {e}"))?;
-    let ct = reader.info().color_type;
     let bd = reader.info().bit_depth;
     if bd != png::BitDepth::Eight {
         return Err(format!("unsupported png bit depth: {bd:?}"));
@@ -335,16 +353,23 @@ fn decode_png_rgba8(data: &[u8]) -> Result<(u32, u32, Vec<u8>), String> {
         .next_frame(&mut buf)
         .map_err(|e| format!("png frame: {e}"))?;
     let (w, h) = (info.width, info.height);
-    match ct {
-        png::ColorType::Rgba => Ok((w, h, buf)),
-        png::ColorType::Rgb => {
-            let mut rgba = Vec::with_capacity(buf.len() / 3 * 4);
+    let expected_rgba = (w * h * 4) as usize;
+    let expected_rgb = (w * h * 3) as usize;
+    match buf.len() {
+        l if l == expected_rgba => Ok((w, h, buf)),
+        l if l == expected_rgb => {
+            let mut rgba = Vec::with_capacity(expected_rgba);
             for p in buf.chunks_exact(3) {
                 rgba.extend_from_slice(&[p[0], p[1], p[2], 255]);
             }
             Ok((w, h, rgba))
         }
-        _ => Err(format!("unsupported png color type: {ct:?}")),
+        _ => Err(format!(
+            "unexpected PNG data size: {} bytes for {}x{}",
+            buf.len(),
+            w,
+            h
+        )),
     }
 }
 
