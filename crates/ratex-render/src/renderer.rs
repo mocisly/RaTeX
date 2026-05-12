@@ -579,10 +579,11 @@ fn try_blit_emoji_raster_fallback(
     em: f32,
     ch: char,
 ) -> bool {
-    let Some((bytes, idx)) = ratex_unicode_font::load_emoji_font_with_index() else {
+    let Some(bytes) = ratex_unicode_font::load_emoji_font_arc() else {
         return false;
     };
-    try_blit_raster_glyph(pixmap, px, py, em, ch, bytes, idx)
+    let idx = ratex_unicode_font::emoji_font_face_index().unwrap_or(0);
+    try_blit_raster_glyph(pixmap, px, py, em, ch, bytes.as_slice(), idx)
 }
 
 fn try_blit_raster_glyph(

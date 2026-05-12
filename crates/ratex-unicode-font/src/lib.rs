@@ -1,11 +1,11 @@
 //! Discover a system Unicode font for fallback rendering of glyphs not present in KaTeX fonts.
 //!
 //! Discovery entry points:
-//! - `load_unicode_font()` — respects `RATEX_UNICODE_FONT` (highest priority), then system fonts.
-//! - `load_fallback_font()` — always discovers a system font, ignoring `RATEX_UNICODE_FONT`.
+//! - `load_unicode_font_arc()` — respects `RATEX_UNICODE_FONT` (highest priority), then system fonts.
+//! - `load_fallback_font_arc()` — always discovers a system font, ignoring `RATEX_UNICODE_FONT`.
 //!   Useful as a second-level fallback when the primary font doesn't cover a glyph (e.g. emoji
 //!   missing from a CJK-only `RATEX_UNICODE_FONT`).
-//! - `load_emoji_font()` — color / emoji faces (e.g. Apple Color Emoji) when `CjkFallback` still
+//! - `load_emoji_font_arc()` — color / emoji faces (e.g. Apple Color Emoji) when `CjkFallback` still
 //!   has no usable outline for a codepoint (common with Arial Unicode + BMP emoji).
 //! - `unicode_font_face_index` / `fallback_font_face_index` / `emoji_font_face_index` — TTC face
 //!   indices for `FontRef::try_from_slice_and_index` when discovery returns a font collection.
@@ -16,13 +16,13 @@ mod emoji_raster;
 
 pub use emoji_raster::{emoji_png_raster_for_char, emoji_raster_for_char, EmojiRasterStrike};
 
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 /// `(full font file bytes, face index within TTC or 0 for single-font / unknown collection face)`.
-static UNICODE_FONT: OnceLock<Option<(Vec<u8>, u32)>> = OnceLock::new();
-static SYSTEM_FALLBACK_FONT: OnceLock<Option<(Vec<u8>, u32)>> = OnceLock::new();
+static UNICODE_FONT: OnceLock<Option<(Arc<Vec<u8>>, u32)>> = OnceLock::new();
+static SYSTEM_FALLBACK_FONT: OnceLock<Option<(Arc<Vec<u8>>, u32)>> = OnceLock::new();
 /// `(full font file bytes, face index within TTC or 0 for single font)`.
-static EMOJI_FONT: OnceLock<Option<(Vec<u8>, u32)>> = OnceLock::new();
+static EMOJI_FONT: OnceLock<Option<(Arc<Vec<u8>>, u32)>> = OnceLock::new();
 
 /// Raw TTF/OTF bytes of a discovered Unicode font, or `None` if no suitable font was found.
 ///
@@ -32,22 +32,19 @@ static EMOJI_FONT: OnceLock<Option<(Vec<u8>, u32)>> = OnceLock::new();
 /// 3. `fontdb` system font database (SansSerif query, then brute-force)
 ///
 /// The result is cached after the first call.
-pub fn load_unicode_font() -> Option<&'static [u8]> {
-    load_unicode_font_with_index().map(|(b, _)| b)
-}
-
-/// Same as [`load_unicode_font`], plus OpenType **collection** index for `Face::parse` /
-/// `FontRef::try_from_slice_and_index` when the bytes are a `.ttc`.
-pub fn load_unicode_font_with_index() -> Option<(&'static [u8], u32)> {
+pub fn load_unicode_font_arc() -> Option<Arc<Vec<u8>>> {
     UNICODE_FONT
         .get_or_init(load_unicode_fallback_font)
         .as_ref()
-        .map(|(v, i)| (v.as_slice(), *i))
+        .map(|(bytes, _)| Arc::clone(bytes))
 }
 
 /// Collection index for the cached primary Unicode face (`0` when not a collection).
 pub fn unicode_font_face_index() -> Option<u32> {
-    load_unicode_font_with_index().map(|(_, i)| i)
+    UNICODE_FONT
+        .get_or_init(load_unicode_fallback_font)
+        .as_ref()
+        .map(|(_, i)| *i)
 }
 
 /// System fallback font for characters not covered by the primary unicode font.
@@ -57,19 +54,19 @@ pub fn unicode_font_face_index() -> Option<u32> {
 /// in the primary CJK font (e.g. emoji when `RATEX_UNICODE_FONT` points to a CJK-only font).
 ///
 /// The result is cached after the first call.
-pub fn load_fallback_font() -> Option<&'static [u8]> {
-    load_fallback_font_with_index().map(|(b, _)| b)
-}
-
-pub fn load_fallback_font_with_index() -> Option<(&'static [u8], u32)> {
+pub fn load_fallback_font_arc() -> Option<Arc<Vec<u8>>> {
     SYSTEM_FALLBACK_FONT
         .get_or_init(discover_system_font)
         .as_ref()
-        .map(|(v, i)| (v.as_slice(), *i))
+        .map(|(bytes, _)| Arc::clone(bytes))
 }
 
+/// Collection index for the cached fallback Unicode face (`0` when not a collection).
 pub fn fallback_font_face_index() -> Option<u32> {
-    load_fallback_font_with_index().map(|(_, i)| i)
+    SYSTEM_FALLBACK_FONT
+        .get_or_init(discover_system_font)
+        .as_ref()
+        .map(|(_, i)| *i)
 }
 
 /// Raw font bytes for a system emoji face (color font), or `None` if none was found.
@@ -81,22 +78,19 @@ pub fn fallback_font_face_index() -> Option<u32> {
 /// paths for some codepoints. PDF embedding of color fonts may also be limited.
 ///
 /// The result is cached after the first call.
-pub fn load_emoji_font() -> Option<&'static [u8]> {
-    load_emoji_font_with_index().map(|(b, _)| b)
-}
-
-/// Same bytes as [`load_emoji_font`], plus the `fontdb` / OpenType **collection** index (use with
-/// `ttf_parser::Face::parse(data, index)` and `ab_glyph::FontRef::try_from_slice_and_index`).
-pub fn load_emoji_font_with_index() -> Option<(&'static [u8], u32)> {
+pub fn load_emoji_font_arc() -> Option<Arc<Vec<u8>>> {
     EMOJI_FONT
         .get_or_init(discover_emoji_font)
         .as_ref()
-        .map(|(v, i)| (v.as_slice(), *i))
+        .map(|(bytes, _)| Arc::clone(bytes))
 }
 
 /// Collection index for the cached emoji face (`0` when the font is not a TTC).
 pub fn emoji_font_face_index() -> Option<u32> {
-    load_emoji_font_with_index().map(|(_, i)| i)
+    EMOJI_FONT
+        .get_or_init(discover_emoji_font)
+        .as_ref()
+        .map(|(_, i)| *i)
 }
 
 fn is_valid_font(bytes: &[u8]) -> bool {
@@ -116,12 +110,13 @@ fn is_sfnt_container(bytes: &[u8]) -> bool {
     is_sfnt_single_font(bytes) || bytes.get(0..4) == Some(b"ttcf")
 }
 
-fn load_unicode_fallback_font() -> Option<(Vec<u8>, u32)> {
+fn load_unicode_fallback_font() -> Option<(Arc<Vec<u8>>, u32)> {
     // 1. User-specified font via RATEX_UNICODE_FONT
     if let Ok(p) = std::env::var("RATEX_UNICODE_FONT") {
         if let Ok(bytes) = std::fs::read(std::path::Path::new(&p)) {
             if is_sfnt_container(&bytes) {
                 // Default face 0; multi-face `.ttc` can be targeted via fontdb discovery without env.
+                let bytes = Arc::new(bytes);
                 return Some((bytes, 0));
             }
         }
@@ -135,7 +130,7 @@ fn load_unicode_fallback_font() -> Option<(Vec<u8>, u32)> {
 ///
 /// Prioritizes fonts with broad Unicode coverage (emoji, symbols, CJK) so that the fallback
 /// is useful even when the primary font (e.g. a narrow Korean font) lacks many glyphs.
-fn discover_system_font() -> Option<(Vec<u8>, u32)> {
+fn discover_system_font() -> Option<(Arc<Vec<u8>>, u32)> {
     // 1. Typical system paths with broad Unicode coverage
     #[rustfmt::skip]
     let candidates: &[&str] = &[
@@ -158,6 +153,7 @@ fn discover_system_font() -> Option<(Vec<u8>, u32)> {
     for path in candidates {
         if let Ok(bytes) = std::fs::read(std::path::Path::new(path)) {
             if is_valid_font(&bytes) {
+                let bytes = Arc::new(bytes);
                 return Some((bytes, 0));
             }
         }
@@ -211,7 +207,8 @@ fn discover_system_font() -> Option<(Vec<u8>, u32)> {
                 })
                 .flatten()
             {
-                return Some(pair);
+                let bytes = Arc::new(pair.0);
+                return Some((bytes, pair.1));
             }
         }
     }
@@ -230,7 +227,8 @@ fn discover_system_font() -> Option<(Vec<u8>, u32)> {
             })
             .flatten()
         {
-            return Some(pair);
+            let bytes = Arc::new(pair.0);
+            return Some((bytes, pair.1));
         }
     }
 
@@ -251,7 +249,8 @@ fn discover_system_font() -> Option<(Vec<u8>, u32)> {
             })
             .flatten()
         {
-            return Some(pair);
+            let bytes = Arc::new(pair.0);
+            return Some((bytes, pair.1));
         }
     }
 
@@ -269,7 +268,7 @@ fn is_likely_color_bitmap_emoji_face(face: &fontdb::FaceInfo) -> bool {
         || face.families.iter().any(|(name, _)| scan(name.as_str()))
 }
 
-fn discover_emoji_font() -> Option<(Vec<u8>, u32)> {
+fn discover_emoji_font() -> Option<(Arc<Vec<u8>>, u32)> {
     let mut db = fontdb::Database::new();
 
     // Prefer explicit paths so `.ttc` collections (e.g. Apple Color Emoji) are loaded reliably.
@@ -315,7 +314,8 @@ fn discover_emoji_font() -> Option<(Vec<u8>, u32)> {
                 })
                 .flatten()
             {
-                return Some(pair);
+                let bytes = Arc::new(pair.0);
+                return Some((bytes, pair.1));
             }
         }
     }
