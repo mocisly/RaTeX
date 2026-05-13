@@ -213,6 +213,9 @@ pub(crate) fn collect_glyph_usage(
             ..
         } = item
         {
+            #[cfg(target_os = "macos")]
+            let glyph_em = ((*scale * body_em) as f32) * 2.0;
+            #[cfg(not(target_os = "macos"))]
             let glyph_em = (*scale * body_em) as f32;
             // Always collect sbix rasters for emoji / dingbat blocks when a color font is loaded,
             // independent of [`resolve_pdf_glyph`] (avoids edge cases where CJK/Main still "claim" a CP).

@@ -102,7 +102,12 @@ pub(crate) fn standalone_glyph(
 fn try_emoji_png_data_url(px: f32, py: f32, em: f32, ch: char) -> Option<StandaloneGlyph> {
     use base64::{engine::general_purpose::STANDARD, Engine as _};
 
-    let strike = ratex_unicode_font::emoji_png_raster_for_char(ch, em)?;
+    #[cfg(target_os = "macos")]
+    let request_em = em * 2.0;
+    #[cfg(not(target_os = "macos"))]
+    let request_em = em;
+
+    let strike = ratex_unicode_font::emoji_png_raster_for_char(ch, request_em)?;
     let scale = em / f32::from(strike.pixels_per_em.max(1));
     let x = px + f32::from(strike.x) * scale;
     // Match `ratex-render::try_blit_raster_glyph`: `y` is the bitmap bottom in y-up strike space;
