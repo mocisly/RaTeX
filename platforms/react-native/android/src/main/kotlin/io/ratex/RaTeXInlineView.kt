@@ -9,6 +9,7 @@ package io.ratex
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.text.Layout
 import android.text.SpannableStringBuilder
 import android.text.StaticLayout
 import android.text.TextPaint
@@ -83,7 +84,7 @@ class RaTeXInlineView @JvmOverloads constructor(
     // MARK: - Measure
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        val layout = staticLayout
+        val layout = ensureMeasuredLayout(widthMeasureSpec)
         val desiredWidth = max(
             (layout?.width ?: 0) + paddingLeft + paddingRight,
             suggestedMinimumWidth,
@@ -146,7 +147,12 @@ class RaTeXInlineView @JvmOverloads constructor(
 
     private fun rebuildLayout() {
         val spannable = currentSpannable ?: return
-        val availWidth = (width - paddingLeft - paddingRight).coerceAtLeast(1)
+        val availWidth = width - paddingLeft - paddingRight
+        if (availWidth <= 0) {
+            requestLayout()
+            invalidate()
+            return
+        }
         if (availWidth == lastLayoutWidth) return
         lastLayoutWidth = availWidth
 
@@ -168,6 +174,50 @@ class RaTeXInlineView @JvmOverloads constructor(
         val widthDp = layout.width.toDouble() / density
         val heightDp = layout.height.toDouble() / density
         reportContentSize(widthDp, heightDp)
+    }
+
+    private fun ensureMeasuredLayout(widthMeasureSpec: Int): StaticLayout? {
+        val spannable = currentSpannable ?: return null
+        val widthMode = MeasureSpec.getMode(widthMeasureSpec)
+        val widthSize = MeasureSpec.getSize(widthMeasureSpec)
+        val horizontalPadding = paddingLeft + paddingRight
+        val density = context.resources.displayMetrics.density
+
+        textPaint.textSize = textFontSize * density
+        textPaint.color = inlineTextColor
+
+        val targetWidth = when (widthMode) {
+            MeasureSpec.EXACTLY -> (widthSize - horizontalPadding).coerceAtLeast(1)
+            MeasureSpec.AT_MOST -> {
+                val maxWidth = (widthSize - horizontalPadding).coerceAtLeast(1)
+                val desired = Layout.getDesiredWidth(spannable, textPaint).toInt().coerceAtLeast(1)
+                minOf(desired, maxWidth)
+            }
+            else -> {
+                val desired = Layout.getDesiredWidth(spannable, textPaint)
+                desired.toInt().coerceAtLeast(1)
+            }
+        }
+
+        val cachedLayout = staticLayout
+        if (cachedLayout != null && lastLayoutWidth == targetWidth) {
+            return cachedLayout
+        }
+
+        val measuredLayout = StaticLayout.Builder
+            .obtain(spannable, 0, spannable.length, textPaint, targetWidth)
+            .setAlignment(android.text.Layout.Alignment.ALIGN_NORMAL)
+            .setLineSpacing(0f, 1f)
+            .setIncludePad(true)
+            .build()
+
+        staticLayout = measuredLayout
+        lastLayoutWidth = targetWidth
+
+        val widthDp = measuredLayout.width.toDouble() / density
+        val heightDp = measuredLayout.height.toDouble() / density
+        reportContentSize(widthDp, heightDp)
+        return measuredLayout
     }
 
     private fun reportContentSize(widthDp: Double, heightDp: Double) {
