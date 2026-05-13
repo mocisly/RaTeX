@@ -108,13 +108,19 @@ fn try_emoji_png_data_url(px: f32, py: f32, em: f32, ch: char) -> Option<Standal
     let request_em = em;
 
     let strike = ratex_unicode_font::emoji_png_raster_for_char(ch, request_em)?;
-    let scale = em / f32::from(strike.pixels_per_em.max(1));
+    let ppm = f32::from(strike.pixels_per_em.max(1));
+    let mut scale = em / ppm;
+    // Scale emoji to fit 1.0em layout width if it's wider (prevents overflow).
+    let actual_width_em = f32::from(strike.width) / ppm;
+    let assumed_width = 1.0;
+    if actual_width_em > 0.01 && actual_width_em > assumed_width * 1.01 {
+        scale *= assumed_width / actual_width_em;
+    }
     let x = px + f32::from(strike.x) * scale;
     // Match `ratex-render::try_blit_raster_glyph`: `y` is the bitmap bottom in y-up strike space;
     // then nudge so the strike's vertical center aligns with the math axis (mixed `\text` + math).
     let mut y = py - (f32::from(strike.y) + f32::from(strike.height)) * scale;
-    let ppem = f32::from(strike.pixels_per_em.max(1));
-    let center_strike = (f32::from(strike.y) + f32::from(strike.height) / 2.0) / ppem;
+    let center_strike = (f32::from(strike.y) + f32::from(strike.height) / 2.0) / ppm;
     let axis = ratex_font::get_global_metrics(0).axis_height as f32;
     y += (center_strike - axis) * em;
     let w = f32::from(strike.width) * scale;

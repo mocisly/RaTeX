@@ -270,25 +270,6 @@ fn is_likely_color_bitmap_emoji_face(face: &fontdb::FaceInfo) -> bool {
 
 fn discover_emoji_font() -> Option<(Arc<Vec<u8>>, u32)> {
     let mut db = fontdb::Database::new();
-
-    // Prefer explicit paths so `.ttc` collections (e.g. Apple Color Emoji) are loaded reliably.
-    #[cfg(target_os = "macos")]
-    {
-        let _ = db.load_font_file(std::path::Path::new(
-            "/System/Library/Fonts/Apple Color Emoji.ttc",
-        ));
-    }
-    #[cfg(target_os = "linux")]
-    {
-        let _ = db.load_font_file(std::path::Path::new(
-            "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
-        ));
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let _ = db.load_font_file(std::path::Path::new(r"C:\Windows\Fonts\seguiemj.ttf"));
-    }
-
     db.load_system_fonts();
 
     #[cfg(target_os = "macos")]

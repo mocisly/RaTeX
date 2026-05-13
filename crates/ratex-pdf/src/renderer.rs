@@ -311,7 +311,15 @@ fn emit_emoji_raster(
     asset: &fonts::EmbeddedEmojiImage,
 ) {
     let ppm = f64::from(asset.pixels_per_em.max(1));
-    let s = glyph_em / ppm;
+    let mut s = glyph_em / ppm;
+
+    // Scale emoji to fit 1.0em layout width if it's wider (prevents overflow).
+    let actual_width_em = f64::from(asset.width_px) / ppm;
+    let assumed_width = 1.0;
+    if actual_width_em > 0.01 && actual_width_em > assumed_width * 1.01 {
+        s *= assumed_width / actual_width_em;
+    }
+
     let disp_w = f64::from(asset.width_px) * s;
     let disp_h = f64::from(asset.height_px) * s;
     let top_x = px + f64::from(asset.strike_x) * s;
