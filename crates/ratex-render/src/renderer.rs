@@ -474,7 +474,18 @@ fn render_glyph_with_font(
     }
 
     let units_per_em = g.font.units_per_em().unwrap_or(1000.0);
-    let scale = em / units_per_em;
+    let mut scale = em / units_per_em;
+
+    // Emoji outline fallback has no KaTeX metrics; scale it to the 1.0em width that layout
+    // allocates for missing emoji so Windows vector fallback does not overflow.
+    if g.font_id == FontId::EmojiFallback {
+        let actual_advance = g.font.h_advance_unscaled(g.glyph_id);
+        let actual_advance_em = actual_advance / units_per_em;
+        let assumed_width = 1.0;
+        if actual_advance_em > 0.01 && actual_advance_em > assumed_width * 1.01 {
+            scale *= assumed_width / actual_advance_em;
+        }
+    }
 
     let mut builder = PathBuilder::new();
     let mut last_end: Option<(f32, f32)> = None;
