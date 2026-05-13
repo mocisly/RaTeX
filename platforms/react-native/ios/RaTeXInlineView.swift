@@ -132,8 +132,26 @@ public class RaTeXInlineView: UIView {
         let attributed = buildAttributedString()
         textStorage.setAttributedString(attributed)
         lastLayoutWidth = -1
-        lastReportedSize = .zero
         lastEmittedSize = nil
+
+        // Compute single-line size so intrinsicContentSize is non-zero before
+        // the first layoutSubviews (prevents zero-width collapse when the
+        // parent uses alignItems: 'center').
+        if textStorage.length > 0 {
+            textContainer.size = CGSize(
+                width: CGFloat.greatestFiniteMagnitude,
+                height: .greatestFiniteMagnitude
+            )
+            layoutManager.ensureLayout(for: textContainer)
+            let usedRect = layoutManager.usedRect(for: textContainer)
+            lastReportedSize = CGSize(
+                width: max(0, ceil(usedRect.width)),
+                height: max(0, ceil(usedRect.height))
+            )
+        } else {
+            lastReportedSize = .zero
+        }
+
         invalidateIntrinsicContentSize()
         setNeedsLayout()
         setNeedsDisplay()

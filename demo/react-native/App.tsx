@@ -120,6 +120,8 @@ const INLINE_EDGE_CASES = [
   },
 ];
 
+const INLINE_ALIGN_ITEMS_CENTER_EXAMPLE = String.raw`helo world npm $\frac{2}{3}$ and so on boss and we create this $m$ and so on thanks`;
+
 export default function App() {
   const isDark = useColorScheme() === 'dark';
   const [custom, setCustom] = useState(String.raw`\frac{1}{\sqrt{2\pi}}`);
@@ -168,6 +170,21 @@ export default function App() {
             />
           </View>
         ))}
+
+        <View style={styles.card}>
+          <Text style={[styles.label, isDark && styles.textLight]}>
+            Fixed height: use justifyContent center for vertical centering;
+            alignItems only affects the cross axis (column → horizontal).
+          </Text>
+          <View style={styles.inlineCenterWrapper}>
+            <InlineTeX
+              content={INLINE_ALIGN_ITEMS_CENTER_EXAMPLE}
+              fontSize={16}
+              textStyle={[styles.inlineText, isDark && styles.textLight]}
+              style={styles.inlineCenterTeX}
+            />
+          </View>
+        </View>
 
         {/* InlineTeX edge cases */}
         <Text style={[styles.sectionTitle, isDark && styles.textLight]}>
@@ -289,4 +306,15 @@ const styles = StyleSheet.create({
   inlineSmallText: {fontSize: 12, color: '#333'},
   inlineLargeText: {fontSize: 24, color: '#333'},
   inlineRedText: {fontSize: 16, color: '#dc2626'},
+  inlineCenterWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    padding: 8,
+    backgroundColor: '#fff',
+    height: 100,
+  },
+  inlineCenterTeX: {width: '50%'},
 });

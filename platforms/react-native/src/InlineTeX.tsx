@@ -60,6 +60,8 @@ export function InlineTeX({
 
   const flatStyle = StyleSheet.flatten(style) as ViewStyle | undefined;
   const hasHeight = typeof flatStyle?.height === 'number';
+  const hasExplicitWidth = flatStyle?.width != null;
+  const hasExplicitAlignSelf = flatStyle?.alignSelf != null;
 
   const estimatedHeight = useMemo(() => {
     const lineHeight = Math.ceil(textFontSize * 1.4);
@@ -71,9 +73,18 @@ export function InlineTeX({
     ? (contentSize ? contentSize.height : estimatedHeight)
     : 0;
 
+  // The native view has no Yoga measure function, so without an explicit width
+  // Yoga defaults to 0.  Always stretch to fill the parent (matching how RN's
+  // <Text> behaves for wrapping content) unless the caller sets width or
+  // alignSelf explicitly.
+  const stretchFallback =
+    !hasExplicitWidth && !hasExplicitAlignSelf
+      ? {alignSelf: 'stretch' as const}
+      : null;
+
   const resolvedStyle = hasHeight
-    ? style
-    : [style, {minHeight: heightValue}];
+    ? [style, stretchFallback]
+    : [style, stretchFallback, {minHeight: heightValue}];
 
   return (
     <RaTeXInlineViewNativeComponent
