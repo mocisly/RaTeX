@@ -195,9 +195,9 @@ The `ratex-pdf` crate writes one `.pdf` per non-empty line from stdin. Options i
 
 By default RaTeX bundles only KaTeX fonts (19 faces for math symbols). Characters outside the KaTeX glyph set — CJK ideographs, emoji, Hangul, etc. — are rendered via a system Unicode font discovered automatically:
 
-1. **`RATEX_UNICODE_FONT`** env var — explicit path to any `.ttf`/`.otf`
-2. **Hard-coded system paths** — macOS (e.g. `/Library/Fonts/Supplemental/Arial Unicode.ttf`, `/System/Library/Fonts/Supplemental/Arial Unicode.ttf`), Linux (`/usr/share/fonts/…`), Windows (`C:\Windows\Fonts\…`)
-3. **fontdb system query** — SansSerif scan, then brute-force
+1. **`RATEX_UNICODE_FONT`** env var — path to any `.ttf`/`.otf`/`.ttc`, with optional `#index` or `#FamilyName` selector for TTC collections (e.g. `NotoSansCJK.ttc#Noto Sans CJK SC`)
+2. **Hard-coded system paths** — Linux (`/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc`), macOS (`/Library/Fonts/Arial Unicode.ttf`, `/System/Library/Fonts/Supplemental/Arial Unicode.ttf`), Windows (`C:\Windows\Fonts\NotoSansSC-VF.ttf`, `C:\Windows\Fonts\msyh.ttc`)
+3. **fontdb system query** — well-known broad-coverage families (Arial Unicode MS, Noto Sans CJK SC, PingFang SC, …), then SansSerif fallback
 
 ```bash
 # Explicit font path (recommended for CI / server environments)

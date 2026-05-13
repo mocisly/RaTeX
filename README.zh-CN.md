@@ -198,16 +198,16 @@ echo '\ce{H2SO4 + 2NaOH -> Na2SO4 + 2H2O}' | \
 
 默认 RaTeX 只捆绑 KaTeX 字体（19 种数学符号字形）。KaTeX 字形集之外的字符——CJK 表意文字、emoji、谚文等——通过系统 Unicode 字体自动发现并渲染：
 
-1. **`RATEX_UNICODE_FONT`** 环境变量：指定任意 `.ttf`/`.otf` 路径
-2. **硬编码系统路径**：macOS（例如 `/Library/Fonts/Supplemental/Arial Unicode.ttf`、`/System/Library/Fonts/Supplemental/Arial Unicode.ttf`）、Linux（`/usr/share/fonts/…`）、Windows（`C:\Windows\Fonts\…`）
-3. **fontdb 系统查询**：优先 SansSerif，最后暴力扫描
+1. **`RATEX_UNICODE_FONT`** 环境变量：指定任意 `.ttf`/`.otf`/`.ttc` 路径，TTC 集合可附加 `#index` 或 `#字体族名` 选择器（例如 `NotoSansCJK.ttc#Noto Sans CJK SC`）
+2. **硬编码系统路径**：Linux（`/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc`）、macOS（`/Library/Fonts/Arial Unicode.ttf`、`/System/Library/Fonts/Supplemental/Arial Unicode.ttf`）、Windows（`C:\Windows\Fonts\NotoSansSC-VF.ttf`、`C:\Windows\Fonts\msyh.ttc`）
+3. **fontdb 系统查询**：优先宽覆盖字体族（Arial Unicode MS、Noto Sans CJK SC、PingFang SC 等），最后回退到 SansSerif
 
 ```bash
 # 显式指定字体路径（推荐用于 CI / 服务器环境）
 RATEX_UNICODE_FONT=/path/to/NotoSansSC-Regular.ttf \
   echo '\text{你好世界}' | cargo run --release -p ratex-render
 
-# 自动发现：macOS 找到 Arial Unicode，Linux 找到 DejaVu Sans，等等
+# 自动发现：macOS 找到 Arial Unicode，Linux 找到 NotoSansCJK，等等
 echo '\text{你好世界}' | cargo run --release -p ratex-render
 ```
 
