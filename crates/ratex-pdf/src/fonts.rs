@@ -373,10 +373,6 @@ fn decode_png_rgba8(data: &[u8]) -> Result<(u32, u32, Vec<u8>), String> {
     let mut dec = png::Decoder::new(std::io::Cursor::new(data));
     dec.set_transformations(png::Transformations::EXPAND);
     let mut reader = dec.read_info().map_err(|e| format!("png: {e}"))?;
-    let bd = reader.info().bit_depth;
-    if bd != png::BitDepth::Eight {
-        return Err(format!("unsupported png bit depth: {bd:?}"));
-    }
     let mut buf = vec![0u8; reader.output_buffer_size()];
     let info = reader
         .next_frame(&mut buf)
