@@ -625,7 +625,14 @@ fn try_blit_raster_glyph(
         Some(p) => p,
         None => return false,
     };
-    let scale = em / f32::from(img.pixels_per_em.max(1));
+    let ppm = f32::from(img.pixels_per_em.max(1));
+    let mut scale = em / ppm;
+    // Scale emoji to fit 1.0em layout width if it's wider (prevents overflow).
+    let actual_width_em = f32::from(img.width) / ppm;
+    let assumed_width = 1.0;
+    if actual_width_em > 0.01 && actual_width_em > assumed_width * 1.01 {
+        scale *= assumed_width / actual_width_em;
+    }
     let top_x = px + f32::from(img.x) * scale;
     // `ttf-parser` / OpenType: `RasterGlyphImage::{x,y}` are in strike pixels; `y` is the
     // **bottom** edge of the bitmap in y-up coordinates (sbix yOffset to bottom; CBDT normalized
@@ -635,8 +642,7 @@ fn try_blit_raster_glyph(
     // ink centroid near 0.5em above baseline. Binary/relation glyphs (+, =) are centered on the
     // math axis (~0.25em). Nudge the bitmap so its vertical center matches the axis — matches
     // mixed `\text{emoji} … formula` rows without changing layout baselines.
-    let ppem = f32::from(img.pixels_per_em.max(1));
-    let center_strike = (f32::from(img.y) + f32::from(img.height) / 2.0) / ppem;
+    let center_strike = (f32::from(img.y) + f32::from(img.height) / 2.0) / ppm;
     let axis = ratex_font::get_global_metrics(0).axis_height as f32;
     top_y += (center_strike - axis) * em;
     let paint = PixmapPaint {
