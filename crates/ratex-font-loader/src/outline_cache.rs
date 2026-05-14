@@ -37,25 +37,31 @@ pub fn get_or_compute_outline(
         }
     }
 
-    // Slow path: compute outline + write-lock
-    // For variable fonts, set wght=400 if available
-    let mut font_instance = font.clone();
-    let axes = font_instance.variations();
-    if !axes.is_empty() {
-        for axis in axes {
+    // Slow path: compute outline + write-lock.
+    // For variable fonts, clone + pin to wght=400; non-variable fonts use the original directly.
+    // Keep in sync with `variable_weight` in ratex-pdf/src/fonts.rs.
+    let needs_variation = font
+        .variations()
+        .iter()
+        .any(|axis| &axis.tag == b"wght");
+
+    let outline = if needs_variation {
+        let mut instance = font.clone();
+        for axis in instance.variations() {
             if &axis.tag == b"wght" {
-                let target_weight = if axis.min_value <= 400.0 && 400.0 <= axis.max_value {
+                let w = if axis.min_value <= 400.0 && 400.0 <= axis.max_value {
                     400.0
                 } else {
                     axis.default_value
                 };
-                font_instance.set_variation(b"wght", target_weight);
+                instance.set_variation(b"wght", w);
                 break;
             }
         }
-    }
-
-    let outline = font_instance.outline(glyph_id)?;
+        instance.outline(glyph_id)?
+    } else {
+        font.outline(glyph_id)?
+    };
     let curves: Arc<[OutlineCurve]> = outline.curves.into();
 
     let mut cache = OUTLINE_CACHE.write().unwrap();

@@ -39,13 +39,11 @@ fn skrifa_collection_index(face_id: FontId) -> u32 {
     }
 }
 
-/// Always use `ab_glyph` / OpenType cmap (same as PNG/SVG). Skrifa's default cmap can map
-/// supplementary-plane emoji in `KaTeX_Main-Regular` to a non-zero GID while `ab_glyph` (and our
-/// layout) treat them as absent — that would make [`resolve_pdf_glyph`] stop at `MainRegular` and
-/// never reach [`FontId::EmojiFallback`], so color emoji rasters were never collected or drawn.
-///
 /// If the font has a `wght` variation axis, return the weight to use.
 /// Prefers Regular (400) and falls back to the axis default if 400 is out of range.
+///
+/// Keep weight-selection logic in sync with `get_or_compute_outline` in
+/// `ratex-font-loader/src/outline_cache.rs` (uses `ab_glyph` instead of `skrifa`).
 fn variable_weight(font: &SfFontRef) -> Option<f32> {
     let axes = font.axes();
     let wght_axis = axes.get_by_tag(Tag::new(b"wght"))?;
