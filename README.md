@@ -195,20 +195,20 @@ The `ratex-pdf` crate writes one `.pdf` per non-empty line from stdin. Options i
 
 By default RaTeX bundles only KaTeX fonts (19 faces for math symbols). Characters outside the KaTeX glyph set — CJK ideographs, emoji, Hangul, etc. — are rendered via a system Unicode font discovered automatically:
 
-1. **`RATEX_UNICODE_FONT`** env var — explicit path to any `.ttf`/`.otf`
-2. **Hard-coded system paths** — macOS (e.g. `/Library/Fonts/Supplemental/Arial Unicode.ttf`, `/System/Library/Fonts/Supplemental/Arial Unicode.ttf`), Linux (`/usr/share/fonts/…`), Windows (`C:\Windows\Fonts\…`)
-3. **fontdb system query** — SansSerif scan, then brute-force
+1. **`RATEX_UNICODE_FONT`** env var — path to any `.ttf`/`.otf`/`.ttc`, with optional `#index` or `#FamilyName` selector for TTC collections (e.g. `NotoSansCJK.ttc#Noto Sans CJK SC`)
+2. **Hard-coded system paths** — Linux (`/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc`), macOS (`/Library/Fonts/Arial Unicode.ttf`, `/System/Library/Fonts/Supplemental/Arial Unicode.ttf`), Windows (`C:\Windows\Fonts\NotoSansSC-VF.ttf`, `C:\Windows\Fonts\msyh.ttc`)
+3. **Locale-aware system discovery** — `system-fonts` resolves prioritized Sans candidates for the current system locale / region, including TTC family selection when needed
 
 ```bash
 # Explicit font path (recommended for CI / server environments)
 RATEX_UNICODE_FONT=/path/to/NotoSansSC-Regular.ttf \
   echo '\text{你好世界}' | cargo run --release -p ratex-render
 
-# Auto-discovery finds Arial Unicode on macOS, DejaVu Sans on Linux, etc.
+# Auto-discovery probes built-in paths first, then locale-aware system Sans fallbacks.
 echo '\text{你好世界}' | cargo run --release -p ratex-render
 ```
 
-All three renderers (PNG, SVG, PDF) use the same discovery crate (`ratex-unicode-font`), so once a font is found the output is consistent across all formats. For PNG and standalone SVG, glyph outlines are embedded as paths. For PDF, the detected CJK glyphs are subsetted and embedded as a CIDFontType2 font.
+All three renderers (PNG, SVG, PDF) use the same discovery crate (`ratex-unicode-font`), so once a font is found the output is consistent across all formats. For variable fonts, RaTeX prefers the Regular `wght=400` instance when that axis is available so outline extraction, metrics, and PDF subsetting stay aligned. For PNG and standalone SVG, glyph outlines are embedded as paths. For PDF, the detected CJK glyphs are subsetted and embedded as a CIDFontType2 font.
 
 ### Browser (WASM)
 
