@@ -32,6 +32,10 @@ pub static SYMBOLS: &[SymbolEntry] = &[
     ("\\owns", 0, 0, "rel", Some('\u{220B}')),
     ("\\ldotp", 0, 0, "punct", Some('.')),
     ("\\cdotp", 0, 0, "punct", Some('\u{22C5}')),
+    // KaTeX maps raw ·  (U+00B7) to the U+22C5 glyph in both modes —
+    // see katex/src/symbols.ts ("// The KaTeX fonts do not contain U+00B7").
+    ("\u{00B7}", 0, 0, "punct", Some('\u{22C5}')),
+    ("\u{00B7}", 1, 0, "textord", Some('\u{22C5}')),
     ("\\#", 0, 0, "textord", Some('#')),
     ("\\#", 1, 0, "textord", Some('#')),
     ("\\&", 0, 0, "textord", Some('&')),

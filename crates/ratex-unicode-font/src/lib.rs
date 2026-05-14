@@ -275,50 +275,60 @@ mod tests {
     #[test]
     #[cfg(target_os = "macos")]
     fn test_load_font_spec_macos() {
-        let result = load_font_spec("/Library/Fonts/Arial Unicode.ttf");
-        assert!(result.is_some(), "Should load Arial Unicode.ttf");
-        if let Some((bytes, face_index)) = result {
-            assert!(!bytes.is_empty());
-            assert_eq!(face_index, 0);
-        }
-
-        let result = load_font_spec("/Library/Fonts/Arial Unicode.ttf#0");
-        assert!(result.is_some(), "Should load Arial Unicode.ttf#0");
-        if let Some((_, face_index)) = result {
-            assert_eq!(face_index, 0);
-        }
-
-        let result = load_font_spec("/Library/Fonts/Arial Unicode.ttf#1");
-        assert!(result.is_none(), "Should fail for TTF with index > 0");
-
-        let result = load_font_spec("/Library/Fonts/Arial Unicode.ttf#Arial Unicode MS");
-        assert!(result.is_none(), "Should fail for TTF with family selector");
-
-        let result_family = load_font_spec("/System/Library/Fonts/PingFang.ttc#PingFang SC");
-        assert!(result_family.is_some(), "Should load PingFang.ttc with family name");
-
-        let result_default = load_font_spec("/System/Library/Fonts/PingFang.ttc");
-        assert!(result_default.is_some(), "Should load PingFang.ttc without selector");
-        if let Some((_, face_index)) = result_default {
-            assert_eq!(face_index, 0, "TTC without selector should default to face 0");
-        }
-
-        if let Some((_, face_index_family)) = result_family {
-            let result_index =
-                load_font_spec(&format!("/System/Library/Fonts/PingFang.ttc#{}", face_index_family));
-            assert!(result_index.is_some(), "Should load PingFang.ttc with index");
-            if let Some((_, face_index_idx)) = result_index {
-                assert_eq!(
-                    face_index_family, face_index_idx,
-                    "Family and index should resolve to same face"
-                );
+        let ttf = "/Library/Fonts/Arial Unicode.ttf";
+        if std::path::Path::new(ttf).exists() {
+            let result = load_font_spec(ttf);
+            assert!(result.is_some(), "Should load Arial Unicode.ttf");
+            if let Some((bytes, face_index)) = result {
+                assert!(!bytes.is_empty());
+                assert_eq!(face_index, 0);
             }
+
+            let result = load_font_spec(&format!("{ttf}#0"));
+            assert!(result.is_some(), "Should load Arial Unicode.ttf#0");
+            if let Some((_, face_index)) = result {
+                assert_eq!(face_index, 0);
+            }
+
+            let result = load_font_spec(&format!("{ttf}#1"));
+            assert!(result.is_none(), "Should fail for TTF with index > 0");
+
+            let result = load_font_spec(&format!("{ttf}#Arial Unicode MS"));
+            assert!(result.is_none(), "Should fail for TTF with family selector");
+        } else {
+            eprintln!("skipping Arial Unicode.ttf checks: {ttf} not found");
         }
 
-        let result = load_font_spec("/System/Library/Fonts/PingFang.ttc#0");
-        assert!(result.is_some(), "Should load PingFang.ttc#0");
+        let ttc = "/System/Library/Fonts/PingFang.ttc";
+        if std::path::Path::new(ttc).exists() {
+            let result_family = load_font_spec(&format!("{ttc}#PingFang SC"));
+            assert!(result_family.is_some(), "Should load PingFang.ttc with family name");
 
-        let result = load_font_spec("/System/Library/Fonts/PingFang.ttc#NonExistent Font");
-        assert!(result.is_none(), "Should fail for non-existent family name");
+            let result_default = load_font_spec(ttc);
+            assert!(result_default.is_some(), "Should load PingFang.ttc without selector");
+            if let Some((_, face_index)) = result_default {
+                assert_eq!(face_index, 0, "TTC without selector should default to face 0");
+            }
+
+            if let Some((_, face_index_family)) = result_family {
+                let result_index =
+                    load_font_spec(&format!("{ttc}#{face_index_family}"));
+                assert!(result_index.is_some(), "Should load PingFang.ttc with index");
+                if let Some((_, face_index_idx)) = result_index {
+                    assert_eq!(
+                        face_index_family, face_index_idx,
+                        "Family and index should resolve to same face"
+                    );
+                }
+            }
+
+            let result = load_font_spec(&format!("{ttc}#0"));
+            assert!(result.is_some(), "Should load PingFang.ttc#0");
+
+            let result = load_font_spec(&format!("{ttc}#NonExistent Font"));
+            assert!(result.is_none(), "Should fail for non-existent family name");
+        } else {
+            eprintln!("skipping PingFang.ttc checks: {ttc} not found");
+        }
     }
 }

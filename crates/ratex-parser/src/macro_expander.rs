@@ -295,6 +295,46 @@ impl<'a> MacroExpander<'a> {
             ("\\rrbracket", "\\mathclose{]\\mkern-3.2mu]}"),
             ("\\copyright", "\\textcircled{c}"),
             ("\\textregistered", "\\textcircled{\\scriptsize R}"),
+            ("\\textcopyright", "\\html@mathml{\\textcircled{c}}{\\char`©}"),
+
+            // ── tmspace (TeX primitive used by \, \: \; \!) ──
+            // KaTeX `\tmspace` takes 3 args: sign (+/-), mu-glue, em-kern.
+            ("\\tmspace", "\\TextOrMath{\\kern#1#3}{\\mskip#1#2}\\relax"),
+
+            // ── Unicode shorthand aliases ──
+            // Mirrors the `defineMacro("\u{...}", "...")` block in
+            // KaTeX `src/macros.ts`, so users can paste raw glyphs and
+            // get the same expansion as the named macro.
+            // Stacked relations (\u2258..\u225F).
+            ("\u{2258}", "\\mathrel{=\\kern{-1em}\\raisebox{0.4em}{$\\scriptsize\\frown$}}"),
+            ("\u{2259}", "\\stackrel{\\tiny\\wedge}{=}"),
+            ("\u{225A}", "\\stackrel{\\tiny\\vee}{=}"),
+            ("\u{225B}", "\\stackrel{\\scriptsize\\star}{=}"),
+            ("\u{225D}", "\\stackrel{\\tiny\\mathrm{def}}{=}"),
+            ("\u{225E}", "\\stackrel{\\tiny\\mathrm{m}}{=}"),
+            ("\u{225F}", "\\stackrel{\\tiny?}{=}"),
+            // Misc relations / corners / punctuation.
+            ("\u{27C2}", "\\perp"),
+            ("\u{203C}", "\\mathclose{!\\mkern-0.8mu!}"),
+            ("\u{231C}", "\\ulcorner"),
+            ("\u{231D}", "\\urcorner"),
+            ("\u{231E}", "\\llcorner"),
+            ("\u{231F}", "\\lrcorner"),
+            ("\u{00A9}", "\\copyright"),
+            ("\u{00AE}", "\\textregistered"),
+            // Mathtools colon variants (∷ ∹ ≔ ≕ ⩴).
+            ("\u{2237}", "\\dblcolon"),
+            ("\u{2239}", "\\eqcolon"),
+            ("\u{2254}", "\\coloneqq"),
+            ("\u{2255}", "\\eqqcolon"),
+            ("\u{2A74}", "\\Coloneqq"),
+            // stmaryrd brackets.
+            ("\u{27E6}", "\\llbracket"),
+            ("\u{27E7}", "\\rrbracket"),
+            ("\u{2983}", "\\lBrace"),
+            ("\u{2984}", "\\rBrace"),
+            // Plimsoll.
+            ("\u{29B5}", "\\minuso"),
 
             // ── dddot / ddddot ──
             ("\\dddot", "{\\overset{\\raisebox{-0.1ex}{\\normalsize ...}}{#1}}"),

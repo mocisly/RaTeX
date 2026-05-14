@@ -19,10 +19,25 @@ pub fn register(map: &mut HashMap<&'static str, FunctionSpec>) {
 
     define_function_full(
         map,
-        &["\\cancel", "\\bcancel", "\\xcancel", "\\sout", "\\phase"],
+        &["\\cancel", "\\bcancel", "\\xcancel", "\\phase"],
         "enclose",
         1, 0, None,
         false, false, true, false, false,
+        handle_cancel,
+    );
+
+    // \sout originates as a LaTeX text-mode command but KaTeX accepts it in
+    // both modes (allowedInText: true, no argType override → arg inherits
+    // surrounding mode). We mirror that so `\text{\sout{abc}}` parses while
+    // `\sout{x^2}` still keeps its argument in math mode.
+    define_function_full(
+        map,
+        &["\\sout"],
+        "enclose",
+        1, 0, None,
+        false,
+        true, true,
+        false, false,
         handle_cancel,
     );
 

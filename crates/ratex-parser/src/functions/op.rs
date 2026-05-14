@@ -50,11 +50,12 @@ pub fn register(map: &mut HashMap<&'static str, FunctionSpec>) {
         handle_op_text_limits,
     );
 
-    // No limits, symbols (integrals)
+    // No limits, symbols (integrals) — including single-char Unicode equivalents.
     define_function_full(
         map,
         &[
             "\\int", "\\iint", "\\iiint", "\\oint", "\\oiint", "\\oiiint",
+            "\u{222B}", "\u{222C}", "\u{222D}", "\u{222E}", "\u{222F}", "\u{2230}",
         ],
         "op",
         0, 0, None,
@@ -89,6 +90,18 @@ fn single_char_big_op(c: &str) -> Option<&'static str> {
         "\u{2A02}" => Some("\\bigotimes"),
         "\u{2A04}" => Some("\\biguplus"),
         "\u{2A06}" => Some("\\bigsqcup"),
+        _ => None,
+    }
+}
+
+fn single_char_integral(c: &str) -> Option<&'static str> {
+    match c {
+        "\u{222B}" => Some("\\int"),
+        "\u{222C}" => Some("\\iint"),
+        "\u{222D}" => Some("\\iiint"),
+        "\u{222E}" => Some("\\oint"),
+        "\u{222F}" => Some("\\oiint"),
+        "\u{2230}" => Some("\\oiiint"),
         _ => None,
     }
 }
@@ -155,6 +168,9 @@ fn handle_op_symbol_nolimits(
     _args: Vec<ParseNode>,
     _opt_args: Vec<Option<ParseNode>>,
 ) -> ParseResult<ParseNode> {
+    let name = single_char_integral(&ctx.func_name)
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| ctx.func_name.clone());
     Ok(ParseNode::Op {
         mode: ctx.parser.mode,
         limits: false,
@@ -162,7 +178,7 @@ fn handle_op_symbol_nolimits(
         suppress_base_shift: None,
         parent_is_sup_sub: false,
         symbol: true,
-        name: Some(ctx.func_name.clone()),
+        name: Some(name),
         body: None,
         loc: None,
     })
