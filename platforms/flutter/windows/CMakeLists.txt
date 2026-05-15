@@ -8,6 +8,7 @@ set(PLUGIN_NAME "ratex_flutter_plugin")
 
 list(APPEND PLUGIN_SOURCES
   "ratex_flutter_plugin.cpp"
+  "ratex_flutter_plugin_c_api.cpp"
 )
 
 add_library(${PLUGIN_NAME} SHARED
