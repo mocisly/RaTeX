@@ -9,7 +9,7 @@ Pod::Spec.new do |s|
   s.homepage       = "https://github.com/erweixin/RaTeX"
   s.license        = package["license"]
   s.authors        = { "erweixin" => "https://github.com/erweixin" }
-  s.platforms      = { :ios => "14.0" }
+  s.platforms      = { :ios => "14.0", :osx => "13.0" }
   s.source         = { :git => "https://github.com/erweixin/RaTeX.git", :tag => s.version.to_s }
 
   # Swift source files + ObjC++ bridge

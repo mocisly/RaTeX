@@ -163,6 +163,9 @@ All commands use internally-tagged JSON: `"type"` is a field alongside the coord
 # iOS (produces RaTeX.xcframework)
 bash platforms/ios/build-ios.sh
 
+# Apple (iOS + macOS slices; required by React Native macOS)
+bash scripts/build-apple-xcframework.sh
+
 # Android (produces jniLibs/*.so)
 bash platforms/android/build-android.sh
 

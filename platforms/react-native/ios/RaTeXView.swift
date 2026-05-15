@@ -1,11 +1,15 @@
-// RaTeXView.swift — UIKit view and SwiftUI wrapper for rendering a LaTeX formula.
+// RaTeXView.swift — Platform view and SwiftUI wrapper for rendering a LaTeX formula.
 
+#if os(macOS)
+import AppKit
+#else
 import UIKit
+#endif
 import SwiftUI
 
-// MARK: - UIKit
+// MARK: - UIKit / AppKit
 
-/// A UIView that renders a LaTeX formula using the RaTeX engine.
+/// A view that renders a LaTeX formula using the RaTeX engine.
 ///
 /// ```swift
 /// let view = RaTeXView()
@@ -13,7 +17,7 @@ import SwiftUI
 /// view.fontSize = 28
 /// ```
 @MainActor
-public class RaTeXView: UIView {
+public class RaTeXView: PlatformView {
 
     // MARK: Public properties
 
@@ -34,7 +38,7 @@ public class RaTeXView: UIView {
     }
 
     /// Default formula color. Explicit LaTeX colors still take precedence.
-    public var color: UIColor = .black {
+    public var color: PlatformColor = .black {
         didSet { guard !color.isEqual(oldValue) else { return }; rerender() }
     }
 
@@ -49,17 +53,41 @@ public class RaTeXView: UIView {
 
     public override init(frame: CGRect) {
         super.init(frame: frame)
+        #if os(macOS)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
+        layer?.backgroundColor = NSColor.clear.cgColor
+        #else
         backgroundColor = .clear
-        // Redraw whenever the frame changes (needed in Fabric / any layout system
-        // that sets the frame after updateProps has already called setNeedsDisplay).
         contentMode = .redraw
+        #endif
     }
 
     public required init?(coder: NSCoder) {
         super.init(coder: coder)
+        #if os(macOS)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
+        layer?.backgroundColor = NSColor.clear.cgColor
+        #else
         backgroundColor = .clear
         contentMode = .redraw
+        #endif
     }
+
+    #if os(macOS)
+    public override var isFlipped: Bool { true }
+
+    /// Equivalent to iOS `contentMode = .redraw`: when the frame size changes (e.g.
+    /// Fabric sets the frame after updateProps already triggered a display update),
+    /// mark the view dirty so `draw(_:)` is called again with the new bounds.
+    public override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        if renderer != nil {
+            platformSetNeedsDisplay()
+        }
+    }
+    #endif
 
     // MARK: Layout
 
@@ -71,7 +99,11 @@ public class RaTeXView: UIView {
     // MARK: Drawing
 
     public override func draw(_ rect: CGRect) {
+        #if os(macOS)
+        guard let renderer, let ctx = NSGraphicsContext.current?.cgContext else { return }
+        #else
         guard let renderer, let ctx = UIGraphicsGetCurrentContext() else { return }
+        #endif
 
         let contentW = renderer.width
         let contentH = renderer.totalHeight
@@ -97,6 +129,12 @@ public class RaTeXView: UIView {
         ctx.restoreGState()
     }
 
+    #if os(macOS)
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        rerender()
+    }
+    #else
     public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
         guard let previousTraitCollection else { return }
@@ -105,24 +143,31 @@ public class RaTeXView: UIView {
         }
         rerender()
     }
+    #endif
 
     // MARK: Private
 
     private func rerender() {
-        // Parsing + layout is < 1ms — run synchronously on the main thread.
-        // Async dispatch would cause UITableView/List to lock in a zero height
-        // before the render completes, making cells invisible.
         RaTeXFontLoader.ensureLoaded()
         do {
+            #if os(macOS)
+            let dl = try RaTeXEngine.shared.parse(
+                latex,
+                displayMode: displayMode,
+                color: color,
+                appearance: effectiveAppearance
+            )
+            #else
             let dl = try RaTeXEngine.shared.parse(
                 latex,
                 displayMode: displayMode,
                 color: color,
                 traitCollection: traitCollection
             )
+            #endif
             renderer = RaTeXRenderer(displayList: dl, fontSize: fontSize)
             invalidateIntrinsicContentSize()
-            setNeedsDisplay()
+            platformSetNeedsDisplay()
         } catch {
             onError?(error)
         }
@@ -130,6 +175,41 @@ public class RaTeXView: UIView {
 }
 
 // MARK: - SwiftUI
+
+#if os(macOS)
+
+/// A SwiftUI view that renders a LaTeX formula.
+///
+/// ```swift
+/// RaTeXFormula(latex: #"\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}"#, fontSize: 24)
+/// ```
+@available(macOS 11, *)
+public struct RaTeXFormula: NSViewRepresentable {
+    public let latex: String
+    public var fontSize: CGFloat = 24
+    public var onError: ((Error) -> Void)? = nil
+
+    public init(latex: String, fontSize: CGFloat = 24, onError: ((Error) -> Void)? = nil) {
+        self.latex = latex
+        self.fontSize = fontSize
+        self.onError = onError
+    }
+
+    public func makeNSView(context: Context) -> RaTeXView {
+        let view = RaTeXView()
+        view.setContentHuggingPriority(.required, for: .horizontal)
+        view.setContentHuggingPriority(.required, for: .vertical)
+        return view
+    }
+
+    public func updateNSView(_ nsView: RaTeXView, context: Context) {
+        nsView.fontSize = fontSize
+        nsView.onError  = onError
+        nsView.latex    = latex
+    }
+}
+
+#else
 
 /// A SwiftUI view that renders a LaTeX formula.
 ///
@@ -161,3 +241,5 @@ public struct RaTeXFormula: UIViewRepresentable {
         uiView.latex    = latex
     }
 }
+
+#endif

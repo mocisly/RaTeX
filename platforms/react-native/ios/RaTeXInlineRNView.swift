@@ -1,28 +1,32 @@
 // RaTeXInlineRNView.swift — ObjC-compatible wrapper around RaTeXInlineView for React Native.
 
+#if os(macOS)
+import AppKit
+#else
 import UIKit
+#endif
 
 @objc(RaTeXInlineRNView)
 @MainActor
-public class RaTeXInlineRNView: UIView {
+public class RaTeXInlineRNView: PlatformView {
 
     private let innerView = RaTeXInlineView()
-    private var bridgedColor: UIColor?
-    private var bridgedTextColor: UIColor?
+    private var bridgedColor: PlatformColor?
+    private var bridgedTextColor: PlatformColor?
 
     // MARK: - ObjC-bridgeable properties
 
     @objc public var content: String {
         get { innerView.content }
-        set { innerView.content = newValue; invalidateIntrinsicContentSize(); setNeedsLayout() }
+        set { innerView.content = newValue; invalidateIntrinsicContentSize(); platformSetNeedsLayout() }
     }
 
     @objc public var fontSize: CGFloat {
         get { innerView.formulaFontSize }
-        set { innerView.formulaFontSize = newValue; invalidateIntrinsicContentSize(); setNeedsLayout() }
+        set { innerView.formulaFontSize = newValue; invalidateIntrinsicContentSize(); platformSetNeedsLayout() }
     }
 
-    @objc public var color: UIColor? {
+    @objc public var color: PlatformColor? {
         get { bridgedColor }
         set {
             guard !isSameColor(newValue, bridgedColor) else { return }
@@ -31,7 +35,7 @@ public class RaTeXInlineRNView: UIView {
         }
     }
 
-    @objc public var textColor: UIColor? {
+    @objc public var textColor: PlatformColor? {
         get { bridgedTextColor }
         set {
             guard !isSameColor(newValue, bridgedTextColor) else { return }
@@ -42,7 +46,7 @@ public class RaTeXInlineRNView: UIView {
 
     @objc public var textFontSize: CGFloat {
         get { innerView.textFontSize }
-        set { innerView.textFontSize = newValue; invalidateIntrinsicContentSize(); setNeedsLayout() }
+        set { innerView.textFontSize = newValue; invalidateIntrinsicContentSize(); platformSetNeedsLayout() }
     }
 
     // MARK: - Event callbacks
@@ -73,6 +77,10 @@ public class RaTeXInlineRNView: UIView {
 
     // MARK: - Layout
 
+    #if os(macOS)
+    public override var isFlipped: Bool { true }
+    #endif
+
     public override var intrinsicContentSize: CGSize {
         innerView.intrinsicContentSize
     }
@@ -80,13 +88,18 @@ public class RaTeXInlineRNView: UIView {
     @objc public func resetContentSizeReporting() {
         innerView.resetContentSizeReporting()
         invalidateIntrinsicContentSize()
-        setNeedsLayout()
+        platformSetNeedsLayout()
     }
 
     // MARK: - Private
 
     private func setup() {
+        #if os(macOS)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        #else
         backgroundColor = .clear
+        #endif
         addSubview(innerView)
         innerView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -118,7 +131,7 @@ public class RaTeXInlineRNView: UIView {
 
     private static var fontsLoaded = false
 
-    private func isSameColor(_ a: UIColor?, _ b: UIColor?) -> Bool {
+    private func isSameColor(_ a: PlatformColor?, _ b: PlatformColor?) -> Bool {
         if a == nil && b == nil { return true }
         guard let a, let b else { return false }
         return a.isEqual(b)

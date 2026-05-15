@@ -6,7 +6,7 @@ Native LaTeX math rendering for React Native — no WebView, no JavaScript math 
 
 ## Features
 
-- Renders LaTeX math natively on iOS and Android
+- Renders LaTeX math natively on iOS, Android, and macOS (via [React Native macOS](https://github.com/microsoft/react-native-macos))
 - Supports both the **New Architecture** (Fabric / JSI) and the **Old Architecture** (Bridge)
 - Measures rendered content size for scroll and dynamic layout
 - Error callback for parse failures
@@ -20,6 +20,7 @@ Native LaTeX math rendering for React Native — no WebView, no JavaScript math 
 | React Native | ≥ 0.73 |
 | React | ≥ 18 |
 | iOS | ≥ 14.0 |
+| macOS | ≥ 13.0 (when using React Native macOS) |
 | Android | minSdk 21 (Android 5.0+) |
 
 ## Installation
@@ -33,6 +34,10 @@ npm install ratex-react-native
 ```sh
 cd ios && pod install
 ```
+
+### macOS (React Native macOS)
+
+Use the same `ratex-react-native` pod on macOS: from your app’s `macos/` folder run `pod install`, then `npx react-native run-macos`. The `RaTeX.xcframework` vendored by this pod must include a **macOS** slice (see `./scripts/build-apple-xcframework.sh` in the RaTeX repo).
 
 ### Android
 

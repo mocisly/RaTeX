@@ -57,7 +57,13 @@ rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
 bash platforms/ios/build-ios.sh
 ```
 
-将生成 `platforms/ios/RaTeX.xcframework`。
+将生成仅含 **iOS** 切片的 `platforms/ios/RaTeX.xcframework`。
+
+> 若用于 React Native macOS（需要同时包含 macOS 切片），请改用：
+>
+> ```bash
+> bash scripts/build-apple-xcframework.sh
+> ```
 
 ---
 
@@ -67,7 +73,7 @@ bash platforms/ios/build-ios.sh
 
 在 Xcode 中：**File → Add Package Dependencies**，输入 `https://github.com/erweixin/RaTeX`，选择 `RaTeX` 产品。
 
-**本地开发** — 先执行 `bash platforms/ios/build-ios.sh`，然后在 Xcode 中通过 **File → Add Package Dependencies → Add Local…** 指向仓库根目录。
+**本地开发** — 先执行 `bash platforms/ios/build-ios.sh`，然后在 Xcode 中通过 **File → Add Package Dependencies → Add Local…** 指向仓库根目录。若为 React Native macOS 场景，请改用 `bash scripts/build-apple-xcframework.sh`。
 
 ### 方式 B — 手动集成
 
@@ -189,7 +195,7 @@ renderer.draw(in: UIGraphicsGetCurrentContext()!)
 
 | 文件 | 说明 |
 |------|------|
-| `build-ios.sh` | 构建脚本 → 生成 `RaTeX.xcframework` |
+| `build-ios.sh` | iOS-only 构建入口（委托统一 Apple 构建脚本） |
 | `Package.swift` | Swift Package 清单 |
 | `Sources/RaTeX/DisplayList.swift` | Rust 类型的 Codable Swift 镜像 |
 | `Sources/RaTeX/RaTeXEngine.swift` | 调用 C ABI、解码 JSON |

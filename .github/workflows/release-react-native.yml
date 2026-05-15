@@ -48,7 +48,9 @@ jobs:
             x86_64-linux-android,
             aarch64-apple-ios,
             aarch64-apple-ios-sim,
-            x86_64-apple-ios
+            x86_64-apple-ios,
+            aarch64-apple-darwin,
+            x86_64-apple-darwin
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
@@ -67,8 +69,11 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
 
-      - name: Build iOS XCFramework
-        run: bash platforms/ios/build-ios.sh
+      - name: Build Apple XCFramework (iOS + macOS)
+        run: bash scripts/build-apple-xcframework.sh
+
+      - name: Verify XCFramework platform slices
+        run: bash scripts/verify-xcframework-slices.sh platforms/ios/RaTeX.xcframework ios macos
 
       - name: Inject native libs into React Native package
         run: |

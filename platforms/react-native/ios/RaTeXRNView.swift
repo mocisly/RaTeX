@@ -1,17 +1,21 @@
 // RaTeXRNView.swift — ObjC-bridgeable wrapper around RaTeXView for React Native.
 
+#if os(macOS)
+import AppKit
+#else
 import UIKit
+#endif
 
-/// ObjC-compatible UIView wrapper around `RaTeXView` used as the React Native native view.
+/// ObjC-compatible view wrapper around `RaTeXView` used as the React Native native view.
 ///
 /// Exposes `@objc` properties so React Native can set them via KVC (old arch) or direct
 /// property access from ObjC++ (new arch / Fabric).
 @objc(RaTeXRNView)
 @MainActor
-public class RaTeXRNView: UIView {
+public class RaTeXRNView: PlatformView {
 
     private let innerView = RaTeXView()
-    private var bridgedColor: UIColor?
+    private var bridgedColor: PlatformColor?
 
     // MARK: - ObjC-bridgeable properties
 
@@ -22,7 +26,7 @@ public class RaTeXRNView: UIView {
             lastReportedContentSize = .zero
             innerView.invalidateIntrinsicContentSize()
             invalidateIntrinsicContentSize()
-            setNeedsLayout()
+            platformSetNeedsLayout()
         }
     }
 
@@ -33,7 +37,7 @@ public class RaTeXRNView: UIView {
             lastReportedContentSize = .zero
             innerView.invalidateIntrinsicContentSize()
             invalidateIntrinsicContentSize()
-            setNeedsLayout()
+            platformSetNeedsLayout()
         }
     }
 
@@ -45,11 +49,11 @@ public class RaTeXRNView: UIView {
             lastReportedContentSize = .zero
             innerView.invalidateIntrinsicContentSize()
             invalidateIntrinsicContentSize()
-            setNeedsLayout()
+            platformSetNeedsLayout()
         }
     }
 
-    @objc public var color: UIColor? {
+    @objc public var color: PlatformColor? {
         get { bridgedColor }
         set {
             let oldBridgedColor = bridgedColor
@@ -62,7 +66,7 @@ public class RaTeXRNView: UIView {
             lastReportedContentSize = .zero
             innerView.invalidateIntrinsicContentSize()
             invalidateIntrinsicContentSize()
-            setNeedsLayout()
+            platformSetNeedsLayout()
         }
     }
 
@@ -92,7 +96,7 @@ public class RaTeXRNView: UIView {
             // Fast Refresh can remount JS without remounting the native view.
             // Reset so the next layout pass re-emits size to the new JS listener.
             lastReportedContentSize = .zero
-            setNeedsLayout()
+            platformSetNeedsLayout()
         }
     }
 
@@ -100,7 +104,7 @@ public class RaTeXRNView: UIView {
     @objc public func setContentSizeCallback(_ handler: ((CGFloat, CGFloat) -> Void)?) {
         contentSizeCallback = handler
         lastReportedContentSize = .zero
-        setNeedsLayout()
+        platformSetNeedsLayout()
     }
     private var contentSizeCallback: ((CGFloat, CGFloat) -> Void)?
 
@@ -112,7 +116,7 @@ public class RaTeXRNView: UIView {
     /// where JS listeners are replaced but the native view instance is reused.
     @objc public func resetContentSizeReporting() {
         lastReportedContentSize = .zero
-        setNeedsLayout()
+        platformSetNeedsLayout()
     }
 
     // MARK: - Init
@@ -129,12 +133,27 @@ public class RaTeXRNView: UIView {
 
     // MARK: - Layout
 
+    #if os(macOS)
+    public override var isFlipped: Bool { true }
+    #endif
+
     public override var intrinsicContentSize: CGSize {
         innerView.intrinsicContentSize
     }
 
+    #if os(macOS)
+    public override func layout() {
+        super.layout()
+        performLayoutReporting()
+    }
+    #else
     public override func layoutSubviews() {
         super.layoutSubviews()
+        performLayoutReporting()
+    }
+    #endif
+
+    private func performLayoutReporting() {
         let size = innerView.intrinsicContentSize
         guard size.width > 0, size.height > 0 else { return }
         guard size != lastReportedContentSize else { return }
@@ -158,7 +177,12 @@ public class RaTeXRNView: UIView {
     private static var fontsLoaded = false
 
     private func setup() {
+        #if os(macOS)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        #else
         backgroundColor = .clear
+        #endif
         addSubview(innerView)
         innerView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([

@@ -1,10 +1,9 @@
-// RaTeXInlineViewManager.mm — iOS bridge for RaTeXInlineView (old arch & Fabric).
+// RaTeXInlineViewManager.mm — Apple bridge for RaTeXInlineView (old arch & Fabric).
 
 #ifdef RCT_NEW_ARCH_ENABLED
 #import <React/RCTComponentViewProtocol.h>
 #import <React/RCTFabricComponentsPlugins.h>
 #import <React/RCTViewComponentView.h>
-#import <react/renderer/graphics/Color.h>
 #import <react/renderer/components/RNRaTeXSpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNRaTeXSpec/EventEmitters.h>
 #import <react/renderer/components/RNRaTeXSpec/Props.h>
@@ -14,7 +13,14 @@
 #import <React/RCTUIManager.h>
 #endif
 
+#if TARGET_OS_OSX
+#import <AppKit/AppKit.h>
+#else
+#import <UIKit/UIKit.h>
+#endif
+
 #import "ratex_react_native-Swift.h"
+#import "RaTeXColorUtils.h"
 
 // ---------------------------------------------------------------------------
 // MARK: - New Architecture (Fabric)
@@ -23,22 +29,6 @@
 #ifdef RCT_NEW_ARCH_ENABLED
 
 using namespace facebook::react;
-
-namespace {
-
-inline UIColor *_Nullable RaTeXInlineUIColorFromSharedColor(const SharedColor &sharedColor)
-{
-  if (!sharedColor) {
-    return nil;
-  }
-  const ColorComponents components = (*sharedColor).getColorComponents();
-  return [UIColor colorWithRed:components.red
-                         green:components.green
-                          blue:components.blue
-                         alpha:components.alpha];
-}
-
-} // namespace
 
 @interface RaTeXInlineViewComponentView : RCTViewComponentView
 @end
@@ -59,8 +49,12 @@ inline UIColor *_Nullable RaTeXInlineUIColorFromSharedColor(const SharedColor &s
     _props = defaultProps;
 
     _nativeView = [[RaTeXInlineRNView alloc] initWithFrame:self.bounds];
+#if TARGET_OS_OSX
+    _nativeView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+#else
     _nativeView.autoresizingMask =
         UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+#endif
 
     __weak RaTeXInlineViewComponentView *weakSelf = self;
     [_nativeView setContentSizeCallback:^(CGFloat width, CGFloat height) {
@@ -95,13 +89,21 @@ inline UIColor *_Nullable RaTeXInlineUIColorFromSharedColor(const SharedColor &s
     _nativeView.fontSize = fontSize;
   }
 
-  UIColor *color = RaTeXInlineUIColorFromSharedColor(newProps.color);
+#if TARGET_OS_OSX
+  NSColor *color = RaTeXPlatformColorFromSharedColor(newProps.color);
+#else
+  UIColor *color = RaTeXPlatformColorFromSharedColor(newProps.color);
+#endif
   if ((color == nil) != (_nativeView.color == nil) ||
       (color != nil && ![color isEqual:_nativeView.color])) {
     _nativeView.color = color;
   }
 
-  UIColor *textColor = RaTeXInlineUIColorFromSharedColor(newProps.textColor);
+#if TARGET_OS_OSX
+  NSColor *textColor = RaTeXPlatformColorFromSharedColor(newProps.textColor);
+#else
+  UIColor *textColor = RaTeXPlatformColorFromSharedColor(newProps.textColor);
+#endif
   if ((textColor == nil) != (_nativeView.textColor == nil) ||
       (textColor != nil && ![textColor isEqual:_nativeView.textColor])) {
     _nativeView.textColor = textColor;
@@ -140,15 +142,24 @@ Class<RCTComponentViewProtocol> RaTeXInlineViewCls(void)
 
 RCT_EXPORT_MODULE(RaTeXInlineView)
 
+#if TARGET_OS_OSX
+- (NSView *)view
+#else
 - (UIView *)view
+#endif
 {
   return [[RaTeXInlineRNView alloc] init];
 }
 
 RCT_EXPORT_VIEW_PROPERTY(content, NSString)
 RCT_EXPORT_VIEW_PROPERTY(fontSize, CGFloat)
+#if TARGET_OS_OSX
+RCT_EXPORT_VIEW_PROPERTY(color, NSColor)
+RCT_EXPORT_VIEW_PROPERTY(textColor, NSColor)
+#else
 RCT_EXPORT_VIEW_PROPERTY(color, UIColor)
 RCT_EXPORT_VIEW_PROPERTY(textColor, UIColor)
+#endif
 RCT_EXPORT_VIEW_PROPERTY(textFontSize, CGFloat)
 RCT_EXPORT_VIEW_PROPERTY(onContentSizeChange, RCTDirectEventBlock)
 
