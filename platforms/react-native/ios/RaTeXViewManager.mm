@@ -1,12 +1,9 @@
-// RaTeXViewManager.mm — iOS bridge for RaTeXView (supports old arch & Fabric new arch).
+// RaTeXViewManager.mm — Apple bridge for RaTeXView (supports old arch & Fabric new arch).
 
 #ifdef RCT_NEW_ARCH_ENABLED
 #import <React/RCTComponentViewProtocol.h>
 #import <React/RCTFabricComponentsPlugins.h>
 #import <React/RCTViewComponentView.h>
-// RN 0.76+ 常用预编译 React-Core：不再向 Pods 暴露 <React/Fabric/RCTConversions.h>。
-// 使用 ReactCommon 的 Color API 做 SharedColor → UIColor，避免依赖已移除/未打包的头文件。
-#import <react/renderer/graphics/Color.h>
 #import <react/renderer/components/RNRaTeXSpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNRaTeXSpec/EventEmitters.h>
 #import <react/renderer/components/RNRaTeXSpec/Props.h>
@@ -16,8 +13,15 @@
 #import <React/RCTUIManager.h>
 #endif
 
+#if TARGET_OS_OSX
+#import <AppKit/AppKit.h>
+#else
+#import <UIKit/UIKit.h>
+#endif
+
 // Swift-generated header (module name derived from podspec/target name)
 #import "ratex_react_native-Swift.h"
+#import "RaTeXColorUtils.h"
 
 // ---------------------------------------------------------------------------
 // MARK: - New Architecture (Fabric)
@@ -26,24 +30,6 @@
 #ifdef RCT_NEW_ARCH_ENABLED
 
 using namespace facebook::react;
-
-namespace {
-
-/// Mirrors the old `RCTUIColorFromSharedColor` helper without importing RCTConversions.h
-/// (unavailable when React is consumed as a prebuilt XCFramework).
-inline UIColor *_Nullable RaTeXUIColorFromSharedColor(const SharedColor &sharedColor)
-{
-  if (!sharedColor) {
-    return nil;
-  }
-  const ColorComponents components = (*sharedColor).getColorComponents();
-  return [UIColor colorWithRed:components.red
-                         green:components.green
-                          blue:components.blue
-                         alpha:components.alpha];
-}
-
-} // namespace
 
 // Class name follows RN Fabric convention: {ComponentName}ComponentView
 // so that RCTThirdPartyComponentsProvider can resolve it via NSClassFromString.
@@ -66,8 +52,12 @@ inline UIColor *_Nullable RaTeXUIColorFromSharedColor(const SharedColor &sharedC
     _props = defaultProps;
 
     _nativeView = [[RaTeXRNView alloc] initWithFrame:self.bounds];
+#if TARGET_OS_OSX
+    _nativeView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+#else
     _nativeView.autoresizingMask =
         UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+#endif
 
     __weak RaTeXViewComponentView *weakSelf = self;
     [_nativeView setErrorCallback:^(NSString *errorMsg) {
@@ -118,7 +108,11 @@ inline UIColor *_Nullable RaTeXUIColorFromSharedColor(const SharedColor &sharedC
     _nativeView.displayMode = displayMode;
   }
 
-  UIColor *color = RaTeXUIColorFromSharedColor(newProps.color);
+#if TARGET_OS_OSX
+  NSColor *color = RaTeXPlatformColorFromSharedColor(newProps.color);
+#else
+  UIColor *color = RaTeXPlatformColorFromSharedColor(newProps.color);
+#endif
   if ((color == nil) != (_nativeView.color == nil) ||
       (color != nil && ![color isEqual:_nativeView.color])) {
     _nativeView.color = color;
@@ -155,7 +149,11 @@ Class<RCTComponentViewProtocol> RaTeXViewCls(void)
 
 RCT_EXPORT_MODULE(RaTeXView)
 
+#if TARGET_OS_OSX
+- (NSView *)view
+#else
 - (UIView *)view
+#endif
 {
   return [[RaTeXRNView alloc] init];
 }
@@ -163,7 +161,11 @@ RCT_EXPORT_MODULE(RaTeXView)
 RCT_EXPORT_VIEW_PROPERTY(latex, NSString)
 RCT_EXPORT_VIEW_PROPERTY(fontSize, CGFloat)
 RCT_EXPORT_VIEW_PROPERTY(displayMode, BOOL)
+#if TARGET_OS_OSX
+RCT_EXPORT_VIEW_PROPERTY(color, NSColor)
+#else
 RCT_EXPORT_VIEW_PROPERTY(color, UIColor)
+#endif
 RCT_EXPORT_VIEW_PROPERTY(onError, RCTDirectEventBlock)
 RCT_EXPORT_VIEW_PROPERTY(onContentSizeChange, RCTDirectEventBlock)
 

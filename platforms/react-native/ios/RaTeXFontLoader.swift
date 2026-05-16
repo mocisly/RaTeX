@@ -125,6 +125,17 @@ public enum RaTeXFontLoader {
 
     /// Check whether a specific KaTeX font is already registered.
     public static func isFontRegistered(_ postScriptName: String) -> Bool {
+#if os(macOS)
+        // `CTFontManagerCopyRegisteredFontDescriptors` is not available in the macOS
+        // Swift overlay.  We fall back to CTFontCreateWithName, which searches all
+        // font scopes (system, user, process) — not just the process scope that
+        // CTFontManagerRegisterFontsForURL uses.  In practice this is fine because
+        // KaTeX font names are unique, but it means a system font with the same
+        // PostScript name could produce a false positive.
+        let font = CTFontCreateWithName(postScriptName as CFString, 12, nil)
+        let actual = CTFontCopyPostScriptName(font) as String? ?? ""
+        return actual == postScriptName
+#else
         let array = CTFontManagerCopyRegisteredFontDescriptors(.process, false) as NSArray
         for item in array {
             let desc = item as! CTFontDescriptor
@@ -132,6 +143,7 @@ public enum RaTeXFontLoader {
                name == postScriptName { return true }
         }
         return false
+#endif
     }
 
     // MARK: - Private

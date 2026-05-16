@@ -3,3 +3,4 @@ dist/
 .astro/
 # Populated by scripts/sync-platforms-web.mjs before `astro build`
 public/platforms/web/
+.xcode-derived/

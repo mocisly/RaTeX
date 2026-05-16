@@ -6,7 +6,7 @@ React Native 原生 LaTeX 数学公式渲染库——无 WebView，无 JavaScrip
 
 ## 特性
 
-- 在 iOS 和 Android 上原生渲染 LaTeX 数学公式
+- 在 iOS、Android 与 macOS（[React Native macOS](https://github.com/microsoft/react-native-macos)）上原生渲染 LaTeX 数学公式
 - 同时支持**新架构**（Fabric / JSI）和**旧架构**（Bridge）
 - 测量渲染内容尺寸，便于滚动视图和动态布局
 - 提供解析失败的错误回调
@@ -20,6 +20,7 @@ React Native 原生 LaTeX 数学公式渲染库——无 WebView，无 JavaScrip
 | React Native | ≥ 0.73 |
 | React | ≥ 18 |
 | iOS | ≥ 14.0 |
+| macOS | ≥ 13.0（使用 React Native macOS 时） |
 | Android | minSdk 21（Android 5.0+）|
 
 ## 安装
@@ -33,6 +34,10 @@ npm install ratex-react-native
 ```sh
 cd ios && pod install
 ```
+
+### macOS（React Native macOS）
+
+在应用的 `macos/` 目录执行 `pod install`，然后 `npx react-native run-macos`。本 pod 自带的 `RaTeX.xcframework` 需包含 **macOS** 切片（见 RaTeX 仓库中的 `./scripts/build-apple-xcframework.sh`）。
 
 ### Android
 

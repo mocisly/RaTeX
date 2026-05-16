@@ -55,7 +55,14 @@ From the repo root:
 bash platforms/ios/build-ios.sh
 ```
 
-This produces `platforms/ios/RaTeX.xcframework`.
+This produces `platforms/ios/RaTeX.xcframework` with **iOS** slices.
+
+> React Native with macOS support must build an XCFramework that also contains
+> **macOS** slices:
+>
+> ```bash
+> bash scripts/build-apple-xcframework.sh
+> ```
 
 ---
 
@@ -66,6 +73,7 @@ This produces `platforms/ios/RaTeX.xcframework`.
 In Xcode: **File → Add Package Dependencies**, enter `https://github.com/erweixin/RaTeX` and select the `RaTeX` product.
 
 **Local development** — Run `bash platforms/ios/build-ios.sh` first, then point Xcode to the repo root via **File → Add Package Dependencies → Add Local…**.
+For React Native macOS scenarios, run `bash scripts/build-apple-xcframework.sh` instead.
 
 ### Option B — Manual
 
@@ -189,7 +197,7 @@ by `fontSize` (pt) to produce screen coordinates.
 
 | File | Purpose |
 |------|---------|
-| `build-ios.sh` | Build script → `RaTeX.xcframework` |
+| `build-ios.sh` | iOS-only build entry (delegates to unified Apple build script) |
 | `Package.swift` | Swift Package manifest |
 | `Sources/RaTeX/DisplayList.swift` | Codable Swift mirror of Rust types |
 | `Sources/RaTeX/RaTeXEngine.swift` | Calls C ABI, decodes JSON |

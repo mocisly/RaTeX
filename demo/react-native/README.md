@@ -1,97 +1,92 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# RaTeX React Native Demo
 
-# Getting Started
+This folder contains the **RaTeX** React Native demo app for iOS, Android, and **macOS**.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+> **Version constraint**: macOS support is provided by [react-native-macos](https://github.com/microsoft/react-native-macos), which must stay on the same minor version as `react-native`.
+> This demo is pinned to **`react-native@0.81.6`** + **`react-native-macos@0.81.7`** to satisfy peer dependency constraints.
 
-## Step 1: Start Metro
+> **Upgrade path**: when `react-native-macos` releases a new minor (for example `0.82.x`), upgrade `react-native` and `react-native-macos` together, then align `@react-native/*` toolchain packages, Gradle wrapper, and Node engines in one pass.
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+## Prerequisites
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+- Node **>= 20.19.4** (matches `react-native@0.81.6` engines)
+- Xcode (for iOS / macOS)
+- Android SDK (for Android)
+- Before building Apple platforms for the first time, generate `RaTeX.xcframework` with both iOS and macOS slices:
 
-```sh
-# Using npm
-npm start
+```bash
+# Run from repo root: build platforms/ios/RaTeX.xcframework (iOS + macOS)
+./scripts/build-apple-xcframework.sh
 
-# OR using Yarn
-yarn start
+# Copy into the local ratex-react-native package (same as release-react-native CI)
+rm -rf platforms/react-native/ios/RaTeX.xcframework
+cp -R platforms/ios/RaTeX.xcframework platforms/react-native/ios/
 ```
 
-## Step 2: Build and run your app
+If the macOS slice is missing, `ratex-react-native` may fail with errors like `Unable to find module dependency: 'RaTeXFFI'`.
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+## Install dependencies
 
-### Android
-
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+```bash
+cd demo/react-native
+npm install
 ```
 
 ### iOS
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
-```
-
-Then, and every time you update your native dependencies, run:
-
-```sh
+```bash
+cd ios
+bundle install          # first time only: install CocoaPods from Gemfile
 bundle exec pod install
-```
-
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
+cd ..
 npm run ios
-
-# OR using Yarn
-yarn ios
 ```
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+### Android
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+```bash
+npm run android
+```
 
-## Step 3: Modify your app
+### macOS
 
-Now that you have successfully run the app, let's make changes!
+```bash
+# Install CocoaPods dependencies (first time or after native dependency changes)
+npm run pods:macos
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+# Terminal 1: Metro
+npm start
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+# Terminal 2: Build and run macOS app
+npm run macos
+```
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+You can also open **`macos/RaTeXDemo.xcworkspace`** in Xcode and run scheme **`RaTeXDemo-macOS`**.
 
-## Congratulations! :tada:
+## Tests
 
-You've successfully run and modified your React Native App. :partying_face:
+```bash
+npm test
+```
 
-### Now what?
+## macOS Rendering Regression Checklist
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
+Run these checks before release when macOS rendering code changes:
 
-# Troubleshooting
+1. Inline baseline alignment: verify text mixed with `$...$` formulas keeps a stable baseline in multiple font sizes.
+2. Appearance switching: toggle light/dark mode and verify formula/text colors re-render correctly.
+3. Window resizing: live-resize the window and confirm formulas remain crisp (no persistent blur after resize).
+4. Dynamic content: update formula/text props repeatedly and verify intrinsic size events continue to emit.
 
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+## Notes
 
-# Learn More
+- JS entry: `index.js`; root component: `App.tsx`.
+- `ratex-react-native` is linked locally via `file:../../platforms/react-native`.
+- `metro.config.js` uses `blockList` to avoid resolving a second copy of `react-native` from `platforms/react-native/node_modules`.
+- To regenerate the `macos/` app template, use `npx react-native-macos-init@2.1.3 --version 0.81.7` (be careful with `--overwrite` since generated files are committed in this repo).
 
-To learn more about React Native, take a look at the following resources:
+## Fabric Registration (demo only)
 
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+- `macos/RaTeXDemo-macOS/RaTeXComponentRegistration.m` injects `RaTeXView` / `RaTeXInlineView` via a custom `RCTAppDependencyProvider` subclass (no swizzling).
+- If future RN APIs remove or change `thirdPartyFabricComponents`, migrate to the official third-party Fabric registration flow for that RN version.
+- For production integrations, always prefer the official registration mechanism provided by your RN version.

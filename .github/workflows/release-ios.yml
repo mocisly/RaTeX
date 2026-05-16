@@ -26,6 +26,9 @@ jobs:
       - name: Build XCFramework
         run: bash platforms/ios/build-ios.sh
 
+      - name: Verify XCFramework platform slices
+        run: bash scripts/verify-xcframework-slices.sh platforms/ios/RaTeX.xcframework ios
+
       # Zip the XCFramework — SPM requires a zip for remote binary targets
       - name: Package XCFramework
         run: |

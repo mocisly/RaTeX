@@ -1,14 +1,18 @@
-// RaTeXInlineView.swift — UIView that renders a mix of plain text and $...$
+// RaTeXInlineView.swift — Platform view that renders a mix of plain text and $...$
 // LaTeX formulas in a single text flow using NSLayoutManager.
 //
-// Each formula is converted to a UIImage-backed NSTextAttachment with baseline-
+// Each formula is converted to an image-backed NSTextAttachment with baseline-
 // aligned bounds, so TextKit handles word-wrapping and line-breaking at character
-// granularity — the same way a native UILabel or UITextView would.
+// granularity — the same way a native label or text view would.
 
+#if os(macOS)
+import AppKit
+#else
 import UIKit
+#endif
 
 @MainActor
-public class RaTeXInlineView: UIView {
+public class RaTeXInlineView: PlatformView {
 
     // MARK: - Public properties
 
@@ -20,11 +24,11 @@ public class RaTeXInlineView: UIView {
         didSet { guard formulaFontSize != oldValue else { return }; rebuild() }
     }
 
-    public var formulaColor: UIColor = .black {
+    public var formulaColor: PlatformColor = .black {
         didSet { guard !formulaColor.isEqual(oldValue) else { return }; rebuild() }
     }
 
-    public var textColor: UIColor = .black {
+    public var textColor: PlatformColor = .black {
         didSet { guard !textColor.isEqual(oldValue) else { return }; rebuild() }
     }
 
@@ -56,19 +60,39 @@ public class RaTeXInlineView: UIView {
     }
 
     private func setup() {
+        #if os(macOS)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        #else
         backgroundColor = .clear
         isOpaque = false
         contentMode = .redraw
+        #endif
         textContainer.lineFragmentPadding = 0
         textContainer.lineBreakMode = .byWordWrapping
         layoutManager.addTextContainer(textContainer)
         textStorage.addLayoutManager(layoutManager)
     }
 
+    #if os(macOS)
+    public override var isFlipped: Bool { true }
+    #endif
+
     // MARK: - Layout
 
+    #if os(macOS)
+    public override func layout() {
+        super.layout()
+        performLayoutPass()
+    }
+    #else
     public override func layoutSubviews() {
         super.layoutSubviews()
+        performLayoutPass()
+    }
+    #endif
+
+    private func performLayoutPass() {
         let w = bounds.width
         guard w > 0 else { return }
         if w != lastLayoutWidth {
@@ -76,7 +100,7 @@ public class RaTeXInlineView: UIView {
             textContainer.size = CGSize(width: w, height: .greatestFiniteMagnitude)
             layoutManager.ensureLayout(for: textContainer)
             reportContentSizeIfNeeded()
-            setNeedsDisplay()
+            platformSetNeedsDisplay()
         }
     }
 
@@ -122,7 +146,7 @@ public class RaTeXInlineView: UIView {
     public func resetContentSizeReporting() {
         lastEmittedSize = nil
         lastLayoutWidth = -1
-        setNeedsLayout()
+        platformSetNeedsLayout()
     }
 
     // MARK: - Rebuild
@@ -135,7 +159,7 @@ public class RaTeXInlineView: UIView {
         lastEmittedSize = nil
 
         // Compute single-line size so intrinsicContentSize is non-zero before
-        // the first layoutSubviews (prevents zero-width collapse when the
+        // the first layout pass (prevents zero-width collapse when the
         // parent uses alignItems: 'center').
         if textStorage.length > 0 {
             textContainer.size = CGSize(
@@ -153,15 +177,15 @@ public class RaTeXInlineView: UIView {
         }
 
         invalidateIntrinsicContentSize()
-        setNeedsLayout()
-        setNeedsDisplay()
+        platformSetNeedsLayout()
+        platformSetNeedsDisplay()
     }
 
     private func buildAttributedString() -> NSAttributedString {
         let segments = Self.parseContent(content)
         let result = NSMutableAttributedString()
 
-        let textFont = UIFont.systemFont(ofSize: textFontSize)
+        let textFont = PlatformFont.systemFont(ofSize: textFontSize)
         let textAttrs: [NSAttributedString.Key: Any] = [
             .font: textFont,
             .foregroundColor: textColor,
@@ -184,12 +208,21 @@ public class RaTeXInlineView: UIView {
 
     private func makeFormulaAttachment(_ latex: String) -> RaTeXTextAttachment? {
         do {
+            #if os(macOS)
+            let dl = try RaTeXEngine.shared.parse(
+                latex,
+                displayMode: false,
+                color: formulaColor,
+                appearance: effectiveAppearance
+            )
+            #else
             let dl = try RaTeXEngine.shared.parse(
                 latex,
                 displayMode: false,
                 color: formulaColor,
                 traitCollection: traitCollection
             )
+            #endif
             let renderer = RaTeXRenderer(displayList: dl, fontSize: formulaFontSize)
             return RaTeXTextAttachment(renderer: renderer)
         } catch {
@@ -254,8 +287,14 @@ public class RaTeXInlineView: UIView {
         return segments
     }
 
-    // MARK: - Trait changes
+    // MARK: - Appearance changes
 
+    #if os(macOS)
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        rebuild()
+    }
+    #else
     public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
         guard let previousTraitCollection else { return }
@@ -264,4 +303,5 @@ public class RaTeXInlineView: UIView {
         }
         rebuild()
     }
+    #endif
 }
