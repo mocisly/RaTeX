@@ -78,4 +78,3 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: platforms/android/build/outputs/aar/*.aar
-          generate_release_notes: true
