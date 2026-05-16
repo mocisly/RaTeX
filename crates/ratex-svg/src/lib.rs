@@ -8,10 +8,12 @@
 //! becomes a `<text>` element using KaTeX CSS `font-family` names (`KaTeX_Main`, `KaTeX_Math`, …).
 //! Load [KaTeX](https://katex.org/) stylesheets in the host page for correct shapes.
 //!
-//! **Self-contained SVG:** enable Cargo feature `standalone` and set [`SvgOptions::embed_glyphs`]
-//! with a KaTeX `font_dir` to emit glyph outlines as `<path>` (no webfonts), matching
-//! `ratex-render`'s `ab_glyph` geometry. Color emoji use the same sbix PNG strikes as PNG output,
-//! embedded as `<image href="data:image/png;base64,...">` when vector fallback would be invisible.
+//! **Self-contained SVG:** enable Cargo feature `standalone`, then set
+//! [`SvgOptions::embed_glyphs`] to output glyphs as `<path>` or `<image>` instead of `<text>`.
+//! Without `embed-fonts`, this needs [`SvgOptions::font_dir`] pointing to KaTeX `.ttf` files.
+//! With `embed-fonts`, `font_dir` is ignored and glyph bytes come from the embedded
+//! `ratex-katex-fonts` crate. Color emoji prefer embedded PNG strikes and fall back to outline
+//! paths only when no raster strike is available.
 
 use ratex_types::color::Color;
 use ratex_types::display_item::{DisplayItem, DisplayList};
@@ -29,11 +31,10 @@ pub struct SvgOptions {
     pub padding: f64,
     /// Stroke width for unfilled [`DisplayItem::Path`](DisplayItem::Path), in user units.
     pub stroke_width: f64,
-    /// When the `standalone` feature is enabled and this is `true`, glyphs are drawn as filled
-    /// `<path>` outlines using fonts from [`Self::font_dir`]. Otherwise a `<text>` element with
-    /// KaTeX CSS `font-family` names is emitted.
+    /// When the `standalone` feature is enabled and this is `true`, glyphs are emitted as
+    /// outlines/images instead of KaTeX `<text>` elements.
     pub embed_glyphs: bool,
-    /// Directory containing KaTeX `.ttf` files (same as `ratex_render::RenderOptions::font_dir`).
+    /// Directory containing KaTeX `.ttf` files. Used only when `embed-fonts` is disabled.
     pub font_dir: String,
 }
 
@@ -176,7 +177,7 @@ fn wrap_svg(vb_w: f64, vb_h: f64, body: &str) -> String {
     let w = fmt_num(vb_w);
     let h = fmt_num(vb_h);
     format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}">{body}</svg>"#
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}pt" height="{h}pt">{body}</svg>"#
     )
 }
 

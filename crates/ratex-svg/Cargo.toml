@@ -10,7 +10,8 @@ description = "SVG export for RaTeX DisplayList (vector output, optional KaTeX w
 
 [features]
 default = []
-## Embed glyphs as `<path>` outlines (`ab_glyph`); requires [`SvgOptions::font_dir`] with KaTeX `.ttf` files.
+## Enable outlined-glyph SVG support (`ab_glyph`).
+## When `SvgOptions::embed_glyphs = true`, `SvgOptions::font_dir` is needed unless `embed-fonts` is enabled.
 standalone = ["dep:ab_glyph", "dep:base64", "dep:ratex-font", "dep:ratex-font-loader", "dep:ratex-unicode-font"]
 ## `render-svg` binary: parse + layout from stdin (needs `standalone` for outlined glyphs).
 cli = ["dep:ratex-layout", "dep:ratex-parser"]

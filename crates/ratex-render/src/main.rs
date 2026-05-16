@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
 
@@ -10,6 +11,10 @@ use ratex_types::math_style::MathStyle;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "-h" || a == "--help") {
+        print!("{}", help_text(args.first().map(String::as_str).unwrap_or("render")));
+        return;
+    }
 
     let font_dir = args
         .iter()
@@ -63,6 +68,12 @@ fn main() {
         })
         .unwrap_or(Color::WHITE);
 
+    let input_file = args
+        .iter()
+        .position(|a| a == "--input")
+        .and_then(|i| args.get(i + 1))
+        .cloned();
+
     std::fs::create_dir_all(&output_dir).expect("Failed to create output dir");
 
     let options = RenderOptions {
@@ -77,12 +88,17 @@ fn main() {
     let style = if inline { MathStyle::Text } else { MathStyle::Display };
     let layout_opts = LayoutOptions::default().with_style(style).with_color(color);
 
-    let stdin = io::stdin();
     let mut idx = 0;
-    for line in stdin.lock().lines() {
+    let reader: Box<dyn BufRead> = match input_file {
+        Some(path) => Box::new(io::BufReader::new(
+            File::open(&path).unwrap_or_else(|e| panic!("Failed to open input file '{}': {}", path, e)),
+        )),
+        None => Box::new(io::BufReader::new(io::stdin())),
+    };
+    for line in reader.lines() {
         let line = line.expect("Failed to read line");
         let expr = line.trim();
-        if expr.is_empty() || expr.starts_with('#') {
+        if expr.is_empty() || expr.starts_with('#') || expr.starts_with('%') {
             continue;
         }
 
@@ -141,4 +157,38 @@ fn parse_color_arg(flag: &str, value: &str) -> Result<Color, String> {
             flag, value
         )
     })
+}
+
+fn help_text(program: &str) -> String {
+    let font_mode = if cfg!(feature = "embed-fonts") {
+        "This binary is currently built with embedded fonts."
+    } else {
+        "This binary is currently built without embedded fonts."
+    };
+    let font_dir_option = if cfg!(feature = "embed-fonts") {
+        String::new()
+    } else {
+        "  --font-dir <DIR>                  Directory containing KaTeX font files\n".to_string()
+    };
+    format!(
+        "\
+Usage: {program} [OPTIONS]
+
+Read formulas from --input <FILE> or stdin, one per line.
+Skip empty lines and lines starting with '#' or '%'.
+{font_mode}
+
+Options:
+  -h, --help                        Show this help message
+  --input <FILE>                    Read formulas from file instead of stdin
+{font_dir_option}  --output-dir <DIR>                Write PNGs to this directory [default: output]
+  --dpr <FACTOR>                    Render scale factor [default: 1.0]
+  --font-size <SIZE>                Base font size in pixels [default: 40.0]
+  --color <COLOR>                   Formula color: named, #rgb, #rrggbb, or [MODEL]value
+                                    [default: black]
+  --background-color <COLOR>        Background color: named, #rgb, #rrggbb, [MODEL]value,
+                                    or 'transparent' [default: white]
+  --inline                          Use inline math style instead of display style
+"
+    )
 }

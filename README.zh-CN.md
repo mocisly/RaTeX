@@ -75,7 +75,7 @@ RaTeX 是同一个 KaTeX 兼容的数学引擎，但编译到一个可移植的 
 | **React Native** | C ABI Native 模块 · iOS/Android 原生视图 | 开箱即用 |
 | **Compose Multiplatform** | Kotlin Multiplatform + Compose Canvas · Android / iOS / JVM Desktop | 通过 [`RaTeX-CMP`](https://github.com/darriousliu/RaTeX-CMP) 集成 |
 | **Web** | WASM → Canvas 2D · `<ratex-formula>` Web 组件 | 开箱即用 |
-| **服务端 / CI** | tiny-skia → PNG 光栅化 | 开箱即用 |
+| **服务端 / CI** | `ratex-render` → tiny-skia PNG 光栅化 | 开箱即用 |
 | **SVG** | `ratex-svg` → 自包含矢量 SVG 导出 | 开箱即用 |
 | **PDF** | `ratex-pdf` → 内嵌 KaTeX 字体的矢量 PDF | 开箱即用 |
 
@@ -164,45 +164,62 @@ cd RaTeX
 cargo build --release
 ```
 
-### 渲染为 PNG
+### 渲染为 PNG · SVG · PDF
+
+预编译二进制：
+
+[GitHub Releases](https://github.com/erweixin/RaTeX/releases) 提供预编译 CLI 压缩包。选择与目标操作系统和 CPU 架构匹配的版本并解压即可。预编译二进制已内嵌 KaTeX 字体，无需再传 `--font-dir`。
+
+从源码编译 CLI：
 
 ```bash
-echo '\frac{1}{2} + \sqrt{x}' | cargo run --release -p ratex-render -- --color '#1E88E5'
-
-echo '\ce{H2SO4 + 2NaOH -> Na2SO4 + 2H2O}' | cargo run --release -p ratex-render
+cargo build --release -p ratex-render
+cargo build --release -p ratex-svg --features "cli standalone"
+cargo build --release -p ratex-pdf --features cli
 ```
 
-### 渲染为 SVG
+
+| 输出 | 包 / 二进制 | 构建方式 |
+| --- | --- | --- |
+| PNG | `ratex-render` / `render` | `cargo build --release -p ratex-render`；也可加 `--features embed-fonts` |
+| SVG | `ratex-svg` / `render-svg` | `cargo build --release -p ratex-svg --features "cli standalone"`；也可用 `--features "cli embed-fonts"` |
+| PDF | `ratex-pdf` / `render-pdf` | `cargo build --release -p ratex-pdf --features cli`；也可用 `--features "cli embed-fonts"` |
+
+编译说明：
+
+1. 三个 CLI 在未启用 `embed-fonts` 时，都会先按默认搜索路径查找 KaTeX TTF；如果本地字体不在这些路径里，再显式传入 `--font-dir`。若启用 `embed-fonts`，KaTeX TTF 会通过 [`ratex-katex-fonts`](crates/ratex-katex-fonts) crate 在编译期打包，因此无需再传 `--font-dir`；升级 KaTeX 字体后可运行 [`scripts/sync-katex-ttf-to-font-crate.sh`](scripts/sync-katex-ttf-to-font-crate.sh) 同步到该 crate。
+2. 当前 `render-svg` CLI 在 `standalone` 构建下固定使用 `embed_glyphs = true`，因此输出轮廓/图片字形；若作为库使用，默认 `SvgOptions::embed_glyphs = false` 时仍输出依赖 KaTeX CSS/Web 字体的 `<text>`。
+
+运行示例：
 
 ```bash
-# 默认模式：字形输出为 <text> 元素（正确显示需要 KaTeX 网络字体）
-echo '\frac{1}{2} + \sqrt{x}' | cargo run --release -p ratex-svg --features cli -- --color '#1E88E5'
+# 示例统一使用 `printf '%s\n' '...'`，因为不同 shell 对 `echo` 的反斜杠处理不一致；同一条公式在某些 shell 里需要写成 `\frac`，在另一些里又可能要写成 `\\frac`。
 
-# 自包含模式：从 --font-dir 读取 KaTeX TTF，将字形轮廓嵌入为 <path>
-echo '\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}' | \
-  cargo run --release -p ratex-svg --features cli -- \
-  --font-dir /path/to/katex/fonts --output-dir ./out
+# PNG：直接从 stdin 读取
+printf '%s\n' '\frac{1}{2} + \sqrt{x}' | ./target/release/render --output-dir ./out
 
-# 或使用 embed-fonts：字体来自 workspace 的 ratex-katex-fonts crate，无需 --font-dir（crates.io 发布也可编译）
-echo '\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}' | \
-  cargo run --release -p ratex-svg --features "cli embed-fonts" -- \
-  --output-dir ./out
+# SVG：运行时从 KaTeX TTF 目录加载字体
+printf '%s\n' '\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}' | \
+  ./target/release/render-svg --font-dir /path/to/katex/fonts --color '#1E88E5' --output-dir ./out
+
+# PDF：运行时从 KaTeX TTF 目录加载字体
+printf '%s\n' '\ce{H2SO4 + 2NaOH -> Na2SO4 + 2H2O}' | \
+  ./target/release/render-pdf --font-dir /path/to/katex/fonts --output-dir ./out
+
+# 也可以通过 stdin 从文件读取
+cat formulas.txt | ./target/release/render --output-dir ./out
+
+# 也可以直接指定输入文件
+./target/release/render-svg --input formulas.txt --font-dir /path/to/katex/fonts --output-dir ./out
 ```
 
-`standalone` feature（由 `cli` 启用）会从 `--font-dir` 下的 KaTeX TTF 提取字形轮廓并内嵌到 SVG。若启用 `embed-fonts`，则 TTF 由 [`ratex-katex-fonts`](crates/ratex-katex-fonts) crate 在编译期嵌入，无需指定字体目录；升级 KaTeX 字体后可运行 [`scripts/sync-katex-ttf-to-font-crate.sh`](scripts/sync-katex-ttf-to-font-crate.sh) 同步到该 crate。
+CLI 说明
 
-### 渲染为 PDF
-
-```bash
-# `cli` 已隐含 `embed-fonts`：字体由 ratex-katex-fonts 打包提供（--font-dir 无效）
-echo '\frac{1}{2} + \sqrt{x}' | cargo run --release -p ratex-pdf --features cli -- --output-dir ./out
-
-# 与上面字体来源相同（显式写出 embed-fonts）
-echo '\ce{H2SO4 + 2NaOH -> Na2SO4 + 2H2O}' | \
-  cargo run --release -p ratex-pdf --features "cli embed-fonts" -- --output-dir ./out
-```
-
-`ratex-pdf` 对 stdin 的每一行非空公式输出一个 `.pdf` 文件。支持 `--output-dir`（默认 `output_pdf`）、`--font-size`、`--dpr`、以及 `--inline`（行内公式样式，而非块级 display）。`render-pdf` 可执行文件始终从 `ratex-katex-fonts` 取字形，**`--font-dir` 不会改变嵌入的字体**。若在库中关闭 `embed-fonts`，请在 `PdfOptions.font_dir` 中指定 KaTeX TTF 目录。
+- `--input <FILE>`：从文件读取公式，每行一条公式。
+- `--output-dir <DIR>`：输出目录。默认分别是 `output`、`output_svg`、`output_pdf`。
+- `--help`：查看当前二进制支持的选项，以及当前构建是否启用了嵌入字体。
+- `--color` / `--background-color` 支持命名颜色（如 `black`、`red`、`teal`）、三位或六位十六进制（如 `#f00`、`#ff0000`）、以及 KaTeX / MathJax 风格的颜色模型写法（如 `[RGB]255,0,0`、`[rgb]1,0,0`、`[HTML]B22222`、`[gray]0.5`、`[cmyk]0,1,1,0`）。
+- `ratex-render` 的 `--background-color transparent` 可输出透明背景 PNG。
 
 ### CJK / Unicode 回退字体
 
@@ -214,11 +231,11 @@ echo '\ce{H2SO4 + 2NaOH -> Na2SO4 + 2H2O}' | \
 
 ```bash
 # 显式指定字体路径（推荐用于 CI / 服务器环境）
-RATEX_UNICODE_FONT=/path/to/NotoSansSC-Regular.ttf \
-  echo '\text{你好世界}' | cargo run --release -p ratex-render
+printf '%s\n' '\text{你好世界}' | \
+  RATEX_UNICODE_FONT=/path/to/NotoSansSC-Regular.ttf ./target/release/render --output-dir ./out
 
 # 自动发现：先探测内置路径，再按当前系统 locale 选择 Sans 回退字体
-echo '\text{你好世界}' | cargo run --release -p ratex-render
+printf '%s\n' '\text{你好世界}' | ./target/release/render-pdf --output-dir ./out
 ```
 
 三个渲染器（PNG、SVG、PDF）使用同一个发现 crate（`ratex-unicode-font`），字体找到后各格式输出一致。对于 variable font，如果存在 `wght` 轴，RaTeX 会优先使用 Regular `wght=400` 实例，以保证轮廓提取、字宽度量和 PDF 子集化行为一致。PNG 和自包含 SVG 将字形轮廓嵌入为路径；PDF 将检测到的 CJK 字形子集化并作为 CIDFontType2 字体嵌入。

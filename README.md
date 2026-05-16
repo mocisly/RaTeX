@@ -75,7 +75,7 @@ These are the **command-level** gaps vs KaTeX (including `trust`-style HTML). Ty
 | **React Native** | Native module + C ABI · iOS/Android views | Out of the box |
 | **Compose Multiplatform** | Kotlin Multiplatform + Compose Canvas · Android / iOS / JVM Desktop | Via [`RaTeX-CMP`](https://github.com/darriousliu/RaTeX-CMP) |
 | **Web** | WASM → Canvas 2D · `<ratex-formula>` Web Component | Out of the box |
-| **Server / CI** | tiny-skia → PNG rasterizer | Out of the box |
+| **Server / CI** | `ratex-render` → tiny-skia PNG rasterizer | Out of the box |
 | **SVG** | `ratex-svg` → self-contained vector SVG | Out of the box |
 | **PDF** | `ratex-pdf` → vector PDF with embedded KaTeX fonts | Out of the box |
 
@@ -164,42 +164,63 @@ cd RaTeX
 cargo build --release
 ```
 
-### Render to PNG
+### Render to PNG · SVG · PDF
+
+Prebuilt binaries:
+
+[GitHub Releases](https://github.com/erweixin/RaTeX/releases) provides prebuilt CLI archives. Select the archive that matches the target operating system and CPU architecture, then extract it. The prebuilt binaries bundle KaTeX fonts, so `--font-dir` is not required.
+
+Build the CLI binaries from source:
 
 ```bash
-echo '\frac{1}{2} + \sqrt{x}' | cargo run --release -p ratex-render -- --color '#1E88E5'
-
-echo '\ce{H2SO4 + 2NaOH -> Na2SO4 + 2H2O}' | cargo run --release -p ratex-render
+cargo build --release -p ratex-render
+cargo build --release -p ratex-svg --features "cli standalone"
+cargo build --release -p ratex-pdf --features cli
 ```
 
-### Render to SVG
+| Output | Crate / Binary | Build |
+| --- | --- | --- |
+| PNG | `ratex-render` / `render` | `cargo build --release -p ratex-render`; optionally add `--features embed-fonts` |
+| SVG | `ratex-svg` / `render-svg` | `cargo build --release -p ratex-svg --features "cli standalone"`; or `--features "cli embed-fonts"` |
+| PDF | `ratex-pdf` / `render-pdf` | `cargo build --release -p ratex-pdf --features cli`; or `--features "cli embed-fonts"` |
+
+Build notes:
+
+1. Without `embed-fonts`, all three CLIs first search the default KaTeX TTF locations; pass `--font-dir` only if your fonts are elsewhere. With `embed-fonts`, KaTeX TTFs are bundled via the [`ratex-katex-fonts`](crates/ratex-katex-fonts) crate, so `--font-dir` is no longer needed. After upgrading KaTeX fonts, run [`scripts/sync-katex-ttf-to-font-crate.sh`](scripts/sync-katex-ttf-to-font-crate.sh) to refresh the bundled font crate.
+2. The current `render-svg` CLI always builds self-contained output in `standalone` mode with `embed_glyphs = true`. As a library, `ratex-svg` still defaults to `SvgOptions::embed_glyphs = false`, which emits `<text>` elements that rely on KaTeX CSS/webfonts.
+
+Examples:
 
 ```bash
-# Default: glyphs as <text> elements (correct display requires KaTeX webfonts)
-echo '\frac{1}{2} + \sqrt{x}' | cargo run --release -p ratex-svg --features cli -- --color '#1E88E5'
+# These examples use `printf '%s\n' '...'` because different shells handle
+# backslashes in `echo` differently; the same formula may need `\frac` in one
+# shell and `\\frac` in another.
 
-# Standalone: embed glyph outlines as <path> — no external fonts needed
-echo '\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}' | \
-  cargo run --release -p ratex-svg --features "cli embed-fonts" -- \
-  --output-dir ./out
+# PNG: read directly from stdin
+printf '%s\n' '\frac{1}{2} + \sqrt{x}' | ./target/release/render --output-dir ./out
+
+# SVG: load KaTeX TTFs at runtime
+printf '%s\n' '\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}' | \
+  ./target/release/render-svg --font-dir /path/to/katex/fonts --color '#1E88E5' --output-dir ./out
+
+# PDF: load KaTeX TTFs at runtime
+printf '%s\n' '\ce{H2SO4 + 2NaOH -> Na2SO4 + 2H2O}' | \
+  ./target/release/render-pdf --font-dir /path/to/katex/fonts --output-dir ./out
+
+# You can also read from a file via stdin
+cat formulas.txt | ./target/release/render --output-dir ./out
+
+# Or pass the input file directly
+./target/release/render-svg --input formulas.txt --font-dir /path/to/katex/fonts --output-dir ./out
 ```
 
-The `standalone` feature (enabled by `cli`) reads KaTeX TTF files from `--font-dir` and embeds glyph outlines directly into the SVG, producing a fully self-contained file that renders correctly without any CSS or web fonts.
+CLI notes
 
-The `embed-fonts` feature (implicitly enables `standalone`) bundles the same TTFs via the [`ratex-katex-fonts`](crates/ratex-katex-fonts) crate, so no `--font-dir` is needed and builds from crates.io stay self-contained. To refresh bundled fonts after upgrading KaTeX, run [`scripts/sync-katex-ttf-to-font-crate.sh`](scripts/sync-katex-ttf-to-font-crate.sh).
-
-### Render to PDF
-
-```bash
-# `cli` implies `embed-fonts`: KaTeX TTFs are bundled via ratex-katex-fonts (--font-dir is ignored)
-echo '\frac{1}{2} + \sqrt{x}' | cargo run --release -p ratex-pdf --features cli -- --output-dir ./out
-
-# Equivalent font loading (explicit embed-fonts)
-echo '\ce{H2SO4 + 2NaOH -> Na2SO4 + 2H2O}' | \
-  cargo run --release -p ratex-pdf --features "cli embed-fonts" -- --output-dir ./out
-```
-
-The `ratex-pdf` crate writes one `.pdf` per non-empty line from stdin. Options include `--output-dir` (default `output_pdf`), `--font-size`, `--dpr`, and `--inline` (text style instead of display). The `render-pdf` binary always loads fonts from `ratex-katex-fonts`, so `--font-dir` does not change embedding. For library use without `embed-fonts`, set `PdfOptions.font_dir` to your KaTeX TTF directory instead.
+- `--input <FILE>`: read formulas from a file, one per line.
+- `--output-dir <DIR>`: output directory. Defaults are `output`, `output_svg`, and `output_pdf`.
+- `--help`: show supported options and whether the current build uses embedded fonts.
+- `--color` / `--background-color` accept named colors (for example `black`, `red`, `teal`), 3- or 6-digit hex (`#f00`, `#ff0000`), and KaTeX / MathJax-style color model values (`[RGB]255,0,0`, `[rgb]1,0,0`, `[HTML]B22222`, `[gray]0.5`, `[cmyk]0,1,1,0`).
+- `ratex-render --background-color transparent` produces a transparent PNG.
 
 ### CJK / Unicode fallback
 
@@ -211,11 +232,11 @@ By default RaTeX bundles only KaTeX fonts (19 faces for math symbols). Character
 
 ```bash
 # Explicit font path (recommended for CI / server environments)
-RATEX_UNICODE_FONT=/path/to/NotoSansSC-Regular.ttf \
-  echo '\text{你好世界}' | cargo run --release -p ratex-render
+printf '%s\n' '\text{你好世界}' | \
+  RATEX_UNICODE_FONT=/path/to/NotoSansSC-Regular.ttf ./target/release/render --output-dir ./out
 
 # Auto-discovery probes built-in paths first, then locale-aware system Sans fallbacks.
-echo '\text{你好世界}' | cargo run --release -p ratex-render
+printf '%s\n' '\text{你好世界}' | ./target/release/render-pdf --output-dir ./out
 ```
 
 All three renderers (PNG, SVG, PDF) use the same discovery crate (`ratex-unicode-font`), so once a font is found the output is consistent across all formats. For variable fonts, RaTeX prefers the Regular `wght=400` instance when that axis is available so outline extraction, metrics, and PDF subsetting stay aligned. For PNG and standalone SVG, glyph outlines are embedded as paths. For PDF, the detected CJK glyphs are subsetted and embedded as a CIDFontType2 font.

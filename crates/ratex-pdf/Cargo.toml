@@ -27,7 +27,7 @@ ratex-katex-fonts = { workspace = true, optional = true }
 [features]
 default = []
 embed-fonts = ["dep:ratex-katex-fonts", "ratex-font-loader/embed-fonts"]
-cli = ["embed-fonts", "dep:ratex-layout", "dep:ratex-parser"]
+cli = ["dep:ratex-layout", "dep:ratex-parser"]
 
 [[bin]]
 name = "render-pdf"

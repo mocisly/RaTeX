@@ -10,8 +10,8 @@
 //!   contains the KaTeX `.ttf` files (same layout as the repo `fonts/` tree). The default
 //!   [`PdfOptions::default`] uses an empty `font_dir` and will fail at render time until you set it.
 //! - **With** `embed-fonts`: glyph bytes are loaded from the `ratex-katex-fonts` crate; `font_dir` is
-//!   ignored. The `render-pdf` binary (`cli` feature) always enables `embed-fonts`, so its
-//!   `--font-dir` flag does not affect which fonts are embedded.
+//!   ignored. The `render-pdf` binary supports both modes: pass `--font-dir` when built without
+//!   `embed-fonts`, or enable `embed-fonts` for a self-contained binary.
 
 mod fonts;
 mod renderer;

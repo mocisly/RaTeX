@@ -1,5 +1,6 @@
 //! Batch-export golden cases to PDF using pdf-writer.
 
+use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
 
@@ -10,9 +11,11 @@ use ratex_types::math_style::MathStyle;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "-h" || a == "--help") {
+        print!("{}", help_text(args.first().map(String::as_str).unwrap_or("render-pdf")));
+        return;
+    }
 
-    // `cli` implies `embed-fonts`; glyph bytes come from ratex-katex-fonts.
-    // `PdfOptions::font_dir` is ignored for loading but kept for API compatibility.
     let font_dir = args
         .iter()
         .position(|a| a == "--font-dir")
@@ -41,6 +44,12 @@ fn main() {
         .and_then(|s| s.parse::<f64>().ok())
         .unwrap_or(40.0);
 
+    let input_file = args
+        .iter()
+        .position(|a| a == "--input")
+        .and_then(|i| args.get(i + 1))
+        .cloned();
+
     std::fs::create_dir_all(&output_dir).expect("Failed to create output dir");
 
     let dpr = device_pixel_ratio.clamp(0.01, 16.0);
@@ -59,13 +68,18 @@ fn main() {
     };
     let layout_opts = LayoutOptions::default().with_style(style);
 
-    let stdin = io::stdin();
     let mut idx = 0;
     let mut ok_count = 0;
-    for line in stdin.lock().lines() {
+    let reader: Box<dyn BufRead> = match input_file {
+        Some(path) => Box::new(io::BufReader::new(
+            File::open(&path).unwrap_or_else(|e| panic!("Failed to open input file '{}': {}", path, e)),
+        )),
+        None => Box::new(io::BufReader::new(io::stdin())),
+    };
+    for line in reader.lines() {
         let line = line.expect("Failed to read line");
         let expr = line.trim();
-        if expr.is_empty() || expr.starts_with('#') {
+        if expr.is_empty() || expr.starts_with('#') || expr.starts_with('%') {
             continue;
         }
 
@@ -102,7 +116,12 @@ fn pdf_formula(
 
 fn default_font_dir() -> String {
     const MARKER: &str = "KaTeX_Main-Regular.ttf";
-    let candidates = ["fonts", "../fonts", "../../fonts", "../../../fonts"];
+    let candidates = [
+        "fonts",
+        "../fonts",
+        "../../fonts",
+        "../../../fonts",
+    ];
     for c in &candidates {
         let p = std::path::Path::new(c);
         if p.join(MARKER).is_file() {
@@ -110,4 +129,34 @@ fn default_font_dir() -> String {
         }
     }
     "fonts".to_string()
+}
+
+fn help_text(program: &str) -> String {
+    let font_mode = if cfg!(feature = "embed-fonts") {
+        "This binary is currently built with embedded fonts."
+    } else {
+        "This binary is currently built without embedded fonts."
+    };
+    let font_dir_option = if cfg!(feature = "embed-fonts") {
+        String::new()
+    } else {
+        "  --font-dir <DIR>         Directory containing KaTeX font files\n".to_string()
+    };
+    format!(
+        "\
+Usage: {program} [OPTIONS]
+
+Read formulas from --input <FILE> or stdin, one per line.
+Skip empty lines and lines starting with '#' or '%'.
+{font_mode}
+
+Options:
+  -h, --help             Show this help message
+  --input <FILE>         Read formulas from file instead of stdin
+{font_dir_option}  --output-dir <DIR>     Write PDFs to this directory [default: output_pdf]
+  --dpr <FACTOR>         Scale font size, padding, and stroke width [default: 1.0]
+  --font-size <SIZE>     Base PDF font size in user units [default: 40.0]
+  --inline               Use inline math style instead of display style
+"
+    )
 }

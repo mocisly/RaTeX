@@ -15,11 +15,6 @@ use ratex_types::path_command::PathCommand;
 use crate::fonts::{self, EmbeddedFont};
 
 /// Options controlling PDF output.
-///
-/// If the crate is built **without** `embed-fonts`, you must set [`Self::font_dir`] to a directory
-/// of KaTeX `.ttf` files before calling [`render_to_pdf`]. [`Self::default`] leaves `font_dir`
-/// empty on purpose so callers do not assume a magic path. With `embed-fonts`, `font_dir` is
-/// ignored (glyphs come from `ratex-katex-fonts`).
 #[derive(Debug, Clone)]
 pub struct PdfOptions {
     /// User units per em. Default: 40.
@@ -28,14 +23,11 @@ pub struct PdfOptions {
     pub padding: f64,
     /// Stroke width for unfilled paths, in user units. Default: 1.5.
     pub stroke_width: f64,
-    /// Directory containing KaTeX `.ttf` files. Used only when **`embed-fonts` is disabled**;
-    /// otherwise ignored.
+    /// Directory containing KaTeX `.ttf` files. Used only when `embed-fonts` is disabled.
     pub font_dir: String,
 }
 
 impl Default for PdfOptions {
-    /// Numeric fields match typical CLI defaults. `font_dir` is empty: set it unless using
-    /// `embed-fonts`.
     fn default() -> Self {
         Self {
             font_size: 40.0,

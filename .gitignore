@@ -1,4 +1,5 @@
 /target
+/out
 /output**
 Cargo.lock
 # Machine-specific Cargo cross-compilation config (use env vars instead)

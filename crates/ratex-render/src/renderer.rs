@@ -9,13 +9,13 @@ use tiny_skia::{
     FillRule, FilterQuality, Paint, PathBuilder, Pixmap, PixmapPaint, Stroke, Transform,
 };
 
+/// Options controlling PNG output.
 pub struct RenderOptions {
     pub font_size: f32,
     pub padding: f32,
     /// Background fill color for the output PNG. Set alpha to 0.0 for transparency.
     pub background_color: Color,
-    /// Directory containing KaTeX `*.ttf` files. Required KaTeX faces are loaded lazily;
-    /// rendering fails if a face referenced by the display list is missing.
+    /// Directory containing KaTeX `.ttf` files. Used only when `embed-fonts` is disabled.
     pub font_dir: String,
     /// Multiplies pixels-per-em (and padding) so the same layout renders at higher resolution
     /// (e.g. 2.0 to align RaTeX PNG pixel density with Puppeteer `deviceScaleFactor: 2` refs).
