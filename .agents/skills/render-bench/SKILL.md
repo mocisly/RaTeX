@@ -8,20 +8,6 @@ description: >-
 
 # Render performance benchmarks
 
-## Cross-tool layout (Cursor / Claude Code / Codex)
-
-- **Canonical copy**: repository root `skills/render-bench/SKILL.md` (this file).
-- **Tool entry points** (symlinks to this file in-repo):
-  - Cursor: `.cursor/skills/render-bench/SKILL.md`
-  - Claude Code: `.claude/skills/render-bench/SKILL.md`
-  - Codex: `.agents/skills/render-bench/SKILL.md`
-
-## When to use
-
-- After changes to rendering paths (especially `renderer.rs`, `fonts.rs`, `standalone.rs`, outline caching, font loading).
-- Before committing optimizations — run cold first so cache impact is visible.
-- Comparing before/after for a specific renderer (PNG vs SVG vs PDF).
-
 ## Prerequisites
 
 - Rust toolchain with `--release`.
@@ -43,7 +29,7 @@ Warmup: 1 iteration per formula. Measurement: 3 iterations, averaged.
 ### 2. Font cache cold vs hot timing
 
 ```bash
-cargo test -p ratex-render --test font_cache_timing -- --ignored --nocapture
+cargo test -p ratex-render --test font_cache_timing --release -- --ignored --nocapture
 ```
 
 Measures 3 formulas: first pass (cold — disk I/O for font loading), second pass (hot — `OnceLock` cache hits). Reports speedup ratio.
