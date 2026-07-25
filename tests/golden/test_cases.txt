@@ -1048,3 +1048,4 @@ a · b
 ⨆_{n} Q_n
 \textcolor{#ff000050}{x}
 ○\div□=5\quad□\div○=5
+{\text{\textit{Inflation}}} = 100 * \left({\text{\textit{CPI}}_{t} - \text{\textit{CPI}}_{t-1} \over \text{\textit{CPI}}_{t-1}}\right)
