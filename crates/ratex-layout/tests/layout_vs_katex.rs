@@ -701,3 +701,48 @@ fn mathrm_mm_squared_both_m_upright() {
         "both m should be MainRegular, got {m_fonts:?}"
     );
 }
+
+#[test]
+fn subscript_italic_kern_only_applies_to_symbol_nodes() {
+    use ratex_layout::layout_box::{BoxContent, LayoutBox};
+
+    fn sub_h_kern(lb: &LayoutBox) -> Option<f64> {
+        match &lb.content {
+            BoxContent::SupSub { sub_h_kern, .. } => Some(*sub_h_kern),
+            BoxContent::HBox(children) => children.iter().find_map(sub_h_kern),
+            _ => None,
+        }
+    }
+
+    fn kern_for(expr: &str) -> f64 {
+        let ast = parse(expr).expect("parse");
+        let lbox = layout(&ast, &LayoutOptions::default());
+        sub_h_kern(&lbox).expect("supsub box")
+    }
+
+    assert!(
+        kern_for(r"f_i") < 0.0,
+        "a direct math symbol keeps its italic kern"
+    );
+    assert!(
+        kern_for(r"\mathit{f}_i") < 0.0,
+        "a single-glyph font node builds a direct symbol"
+    );
+    assert!(
+        kern_for(r"\oiint_i") < 0.0,
+        "KaTeX special-cases synthetic multi-integral operators"
+    );
+
+    for expr in [
+        r"{f}_i",
+        r"\mathit{ff}_i",
+        r"\text{\textit{CPI}}_t",
+        r"\color{red}{f}_i",
+    ] {
+        assert_eq!(
+            kern_for(expr),
+            0.0,
+            "span/group base must not inherit a nested glyph's italic correction: {expr}"
+        );
+    }
+}

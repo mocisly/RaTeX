@@ -1213,10 +1213,22 @@ fn layout_supsub(
     // (KaTeX `margin-right: italic`), so we must not add `glyph_italic` again here.
     let italic_correction = 0.0;
 
-    // KaTeX `supsub.js`: for SymbolNode bases, subscripts get `margin-left: -base.italic` so they
-    // are not shifted by the base's italic correction (e.g. ∫_{A_1}).
+    // KaTeX `supsub.js`: only a direct `SymbolNode` base (plus the synthetic `\oiint` /
+    // `\oiiint` operators) gets `margin-left: -base.italic`.  In particular, spans such as
+    // `\text{\textit{CPI}}` and `{x}` must not inherit the italic correction of their last glyph.
     let sub_h_kern = if sub_box.is_some() && !center_scripts {
-        -glyph_italic(&base_box)
+        let direct_italic = direct_glyph_italic(&base_box);
+        let is_oiint = matches!(
+            base,
+            Some(ParseNode::Op {
+                name: Some(name),
+                ..
+            }) if name == "\\oiint" || name == "\\oiiint"
+        );
+        let base_italic = direct_italic
+            .or_else(|| is_oiint.then(|| first_glyph_italic(&base_box)).flatten())
+            .unwrap_or(0.0);
+        -base_italic
     } else {
         0.0
     };
@@ -1782,24 +1794,28 @@ fn layout_operatorname(body: &[ParseNode], options: &LayoutOptions) -> LayoutBox
 /// `\vec` KaTeX SVG: nudge slightly right to match KaTeX reference.
 const VEC_SKEW_EXTRA_RIGHT_EM: f64 = 0.018;
 
-/// Extract the italic correction of the base glyph.
-/// Used by superscripts: KaTeX adds margin-right = italic_correction to italic math characters,
-/// so the superscript starts at advance_width + italic_correction (not just advance_width).
-fn glyph_italic(lb: &LayoutBox) -> f64 {
-    let mut current = lb;
-    loop {
-        match &current.content {
-            BoxContent::Glyph { font_id, char_code } => {
-                return get_char_metrics(*font_id, *char_code)
-                    .map(|m| m.italic)
-                    .unwrap_or(0.0);
-            }
-            BoxContent::HBox(children) => match children.last() {
-                Some(last) => current = last,
-                None => return 0.0,
-            },
-            _ => return 0.0,
+/// Extract the italic correction only when this box itself is a glyph.
+///
+/// This distinction mirrors KaTeX's `base instanceof SymbolNode` check.  Recursing through an
+/// `HBox` would incorrectly treat text/group spans as symbols and pull their subscripts left.
+fn direct_glyph_italic(lb: &LayoutBox) -> Option<f64> {
+    match &lb.content {
+        BoxContent::Glyph { font_id, char_code } => {
+            get_char_metrics(*font_id, *char_code).map(|m| m.italic)
         }
+        _ => None,
+    }
+}
+
+/// Find the first glyph inside a box.
+///
+/// KaTeX special-cases `\oiint` and `\oiiint`: their overlay makes the base a span rather than a
+/// `SymbolNode`, but the underlying integral glyph's italic correction still applies.
+fn first_glyph_italic(lb: &LayoutBox) -> Option<f64> {
+    match &lb.content {
+        BoxContent::Glyph { .. } => direct_glyph_italic(lb),
+        BoxContent::HBox(children) => children.iter().find_map(first_glyph_italic),
+        _ => None,
     }
 }
 
