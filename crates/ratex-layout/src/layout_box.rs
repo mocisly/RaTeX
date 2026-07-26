@@ -128,10 +128,13 @@ pub enum BoxContent {
         col_aligns: Vec<u8>,
         row_heights: Vec<f64>,
         row_depths: Vec<f64>,
-        col_gap: f64,
+        /// Horizontal gap after each column. Length is `col_widths.len() - 1`.
+        col_gaps: Box<[f64]>,
         offset: f64,
         /// Extra x padding before the first column (= arraycolsep when hskip_before_and_after is true).
         content_x_offset: f64,
+        /// Extra x padding after the last column.
+        content_x_end_offset: f64,
         /// For each column boundary (0 = before col 0, ..., num_cols = after last col),
         /// the vertical rule separator type: None = no rule, Some(false) = solid '|', Some(true) = dashed ':'.
         col_separators: Vec<Option<bool>>,

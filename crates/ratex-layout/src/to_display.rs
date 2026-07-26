@@ -539,9 +539,10 @@ fn emit_box(
                 col_aligns,
                 row_heights,
                 row_depths,
-                col_gap,
+                col_gaps,
                 offset,
                 content_x_offset,
+                content_x_end_offset: _content_x_end_offset,
                 col_separators,
                 hlines_before_row,
                 rule_thickness,
@@ -596,13 +597,18 @@ fn emit_box(
                 }
 
                 // Draw vertical column separator lines ('|' = solid, ':' = dashed).
-                // Separator at position i has local x = content_x_offset - col_gap/2 + sum(col_widths[..i]) + col_gap * i.
-                let col_gap_half = col_gap / 2.0;
+                // Put a separator at the midpoint of its column boundary gap.
                 for (i, sep) in col_separators.iter().enumerate() {
                     if let Some(is_dashed) = sep {
                         let prefix_w: f64 = col_widths[..i].iter().sum();
-                        let local_x =
-                            content_x_offset - col_gap_half + prefix_w + col_gap * i as f64;
+                        let preceding_gaps: f64 = col_gaps[..i.saturating_sub(1)].iter().sum();
+                        let local_x = if i == 0 {
+                            0.0
+                        } else if i >= col_widths.len() {
+                            *array_inner_width
+                        } else {
+                            content_x_offset + prefix_w + preceding_gaps + col_gaps[i - 1] / 2.0
+                        };
                         let abs_x = x + local_x * scale - line_thickness / 2.0;
                         if *is_dashed {
                             // Dashed vertical line: draw segments (dash=4t, gap=4t) top to bottom.
@@ -656,12 +662,12 @@ fn emit_box(
                         });
                         cur_x += cw * scale;
                         if c + 1 < row.len() {
-                            cur_x += col_gap * scale;
+                            cur_x += col_gaps.get(c).copied().unwrap_or(0.0) * scale;
                         }
                     }
                     if *tag_col_width > 0.0 {
                         if let Some(tb) = row_tags.get(r).and_then(|o| o.as_ref()) {
-                            let tag_start_em = array_inner_width - content_x_offset + tag_gap_em;
+                            let tag_start_em = array_inner_width + tag_gap_em;
                             let tag_x =
                                 x + tag_start_em * scale + (tag_col_width - tb.width) * scale;
                             child_actions.push(EmitAction::Box {

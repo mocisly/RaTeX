@@ -2953,27 +2953,17 @@ fn layout_array(
     let arrayskip = arraystretch * baselineskip;
     let arstrut_h = 0.7 * arrayskip;
     let arstrut_d = 0.3 * arrayskip;
-    // align/aligned/alignedat: use thin space (3mu) so "x" and "=" are closer,
-    // and cap relation spacing in cells to 3mu so spacing before/after "=" is equal.
-    const ALIGN_RELATION_MU: f64 = 3.0;
-    let col_gap = match col_sep_type {
-        Some("align") => mu_to_em(ALIGN_RELATION_MU, metrics.quad),
-        Some("alignat") => 0.0,
+    let default_side_gap = match col_sep_type {
         Some("small") => {
-            // smallmatrix: 2 × thickspace × (script_multiplier / current_multiplier)
+            // smallmatrix: thickspace × (script_multiplier / current_multiplier)
             // KaTeX: arraycolsep = 0.2778em × (scriptMultiplier / sizeMultiplier)
-            2.0 * mu_to_em(5.0, metrics.quad) * MathStyle::Script.size_multiplier()
+            mu_to_em(5.0, metrics.quad) * MathStyle::Script.size_multiplier()
                 / options.size_multiplier()
         }
-        _ => 2.0 * 5.0 * pt, // 2 × arraycolsep
+        Some("align") | Some("alignat") => 0.0,
+        _ => 5.0 * pt, // arraycolsep
     };
-    let cell_options = match col_sep_type {
-        Some("align") | Some("alignat") => LayoutOptions {
-            align_relation_spacing: Some(ALIGN_RELATION_MU),
-            ..options.clone()
-        },
-        _ => options.clone(),
-    };
+    let cell_options = options.clone();
 
     let num_rows = body.len();
     if num_rows == 0 {
@@ -2984,14 +2974,14 @@ fn layout_array(
 
     // Extract per-column alignment and column separators from cols spec.
     use ratex_parser::parse_node::AlignType;
+    let align_specs: Vec<&ratex_parser::parse_node::AlignSpec> = cols
+        .map(|cs| {
+            cs.iter()
+                .filter(|s| matches!(s.align_type, AlignType::Align))
+                .collect()
+        })
+        .unwrap_or_default();
     let col_aligns: Vec<u8> = {
-        let align_specs: Vec<&ratex_parser::parse_node::AlignSpec> = cols
-            .map(|cs| {
-                cs.iter()
-                    .filter(|s| matches!(s.align_type, AlignType::Align))
-                    .collect()
-            })
-            .unwrap_or_default();
         (0..num_cols)
             .map(|c| {
                 align_specs
@@ -3002,6 +2992,18 @@ fn layout_array(
             })
             .collect()
     };
+    let side_gaps: Vec<(f64, f64)> = (0..num_cols)
+        .map(|c| {
+            let spec = align_specs.get(c);
+            (
+                spec.and_then(|s| s.pregap).unwrap_or(default_side_gap),
+                spec.and_then(|s| s.postgap).unwrap_or(default_side_gap),
+            )
+        })
+        .collect();
+    let col_gaps: Vec<f64> = (0..num_cols.saturating_sub(1))
+        .map(|c| side_gaps[c].1 + side_gaps[c + 1].0)
+        .collect();
 
     // Detect vertical separator positions in the column spec.
     // col_separators[i]: None = no rule, Some(false) = solid '|', Some(true) = dashed ':'.
@@ -3038,7 +3040,7 @@ fn layout_array(
     let mut row_heights = Vec::with_capacity(num_rows);
     let mut row_depths = Vec::with_capacity(num_rows);
 
-    for row in body {
+    for (r, row) in body.iter().enumerate() {
         let mut row_boxes = Vec::with_capacity(num_cols);
         let mut rh = arstrut_h;
         let mut rd = arstrut_d;
@@ -3062,7 +3064,8 @@ fn layout_array(
             row_boxes.push(LayoutBox::new_empty());
         }
 
-        if add_jot {
+        // KaTeX adds \jot between rows, never below the final row.
+        if add_jot && r + 1 < num_rows {
             rd += jot;
         }
 
@@ -3120,12 +3123,22 @@ fn layout_array(
     let offset = total_height / 2.0 + metrics.axis_height;
 
     // Extra x padding before col 0 and after last col (hskip_before_and_after).
-    let content_x_offset = if hskip { col_gap / 2.0 } else { 0.0 };
+    let content_x_offset = if hskip {
+        side_gaps.first().map(|g| g.0).unwrap_or(0.0)
+    } else {
+        0.0
+    };
+    let content_x_end_offset = if hskip {
+        side_gaps.last().map(|g| g.1).unwrap_or(0.0)
+    } else {
+        0.0
+    };
 
     // Width of the cell grid including horizontal padding (no tag column).
     let array_inner_width: f64 = col_widths.iter().sum::<f64>()
-        + col_gap * (num_cols.saturating_sub(1)) as f64
-        + 2.0 * content_x_offset;
+        + col_gaps.iter().sum::<f64>()
+        + content_x_offset
+        + content_x_end_offset;
 
     let mut row_tag_boxes: Vec<Option<LayoutBox>> = (0..num_rows).map(|_| None).collect();
     let mut tag_col_width = 0.0_f64;
@@ -3144,7 +3157,10 @@ fn layout_array(
         }
     }
     let tag_gap_em = if tag_col_width > 0.0 {
-        text_opts.metrics().quad
+        // Compact automatic equation numbers need the extra 0.1em reserved by
+        // KaTeX's block tag column; wide explicit tags retain the standard 1em.
+        let gap_factor = if tag_col_width > 2.0 { 1.0 } else { 1.1 };
+        gap_factor * text_opts.metrics().quad
     } else {
         0.0
     };
@@ -3166,9 +3182,10 @@ fn layout_array(
             col_aligns,
             row_heights: row_heights.clone(),
             row_depths: row_depths.clone(),
-            col_gap,
+            col_gaps: col_gaps.into_boxed_slice(),
             offset,
             content_x_offset,
+            content_x_end_offset,
             col_separators,
             hlines_before_row,
             rule_thickness,
@@ -5222,7 +5239,6 @@ fn layout_cd_arrow(
 ) -> LayoutBox {
     let metrics = options.metrics();
     let axis = metrics.axis_height;
-
     // Vertical CD: kern between side label and shaft (KaTeX `cd-label-*` sits tight; 0.25em
     // widens object columns vs `tests/golden/fixtures` CD).
     const CD_VERT_SIDE_KERN_EM: f64 = 0.11;
@@ -5471,7 +5487,6 @@ fn layout_cd_arrow(
             } else {
                 (0.0, 0.0, inner_w)
             };
-
             let mut children: Vec<LayoutBox> = Vec::new();
             if kern_left > 0.0 {
                 children.push(LayoutBox::new_kern(kern_left));
@@ -5649,7 +5664,7 @@ fn layout_cd(body: &[Vec<ParseNode>], options: &LayoutOptions) -> LayoutBox {
 
     // KaTeX `environments/cd.js` sets `addJot: true` for CD; `array.js` adds `\jot` (3pt) to each
     // row's depth (same as `layout_array` when `add_jot` is set).
-    for rd in &mut row_depths {
+    for rd in row_depths.iter_mut().take(num_rows.saturating_sub(1)) {
         *rd += jot;
     }
 
@@ -5657,7 +5672,7 @@ fn layout_cd(body: &[Vec<ParseNode>], options: &LayoutOptions) -> LayoutBox {
     // KaTeX CD uses `pregap: 0.25, postgap: 0.25` per column (cd.ts line 216-217),
     // giving 0.5em between adjacent columns.  `hskipBeforeAndAfter` is unset (false),
     // so no outer padding.
-    let col_gap = 0.5;
+    let col_gaps = vec![0.5; num_cols.saturating_sub(1)];
 
     // Column alignment: objects are centered, arrows are centered
     let col_aligns: Vec<u8> = (0..num_cols).map(|_| b'c').collect();
@@ -5678,8 +5693,7 @@ fn layout_cd(body: &[Vec<ParseNode>], options: &LayoutOptions) -> LayoutBox {
     let depth = total_height - offset;
 
     // Total width: sum of col_widths + col_gap between each
-    let total_width =
-        col_widths.iter().sum::<f64>() + col_gap * (num_cols.saturating_sub(1)) as f64;
+    let total_width = col_widths.iter().sum::<f64>() + col_gaps.iter().sum::<f64>();
 
     // Build hlines_before_row (all empty for CD)
     let hlines_before_row: Vec<Vec<bool>> = (0..=num_rows).map(|_| vec![]).collect();
@@ -5694,9 +5708,10 @@ fn layout_cd(body: &[Vec<ParseNode>], options: &LayoutOptions) -> LayoutBox {
             col_aligns,
             row_heights,
             row_depths,
-            col_gap,
+            col_gaps: col_gaps.into_boxed_slice(),
             offset,
             content_x_offset: 0.0,
+            content_x_end_offset: 0.0,
             col_separators,
             hlines_before_row,
             rule_thickness: 0.04 * pt,

@@ -1,7 +1,7 @@
 {
   "manifest_version": 1,
   "kind": "ratex-render",
-  "generated_at": "2026-07-26T04:20:12.894232Z",
+  "generated_at": "2026-07-26T13:02:30.108693Z",
   "test_cases": "tests/golden/test_cases.txt",
   "test_cases_sha256": "562afe96aac9a0a935b6b161ced8564360d040f8ac44b1943d3bdb982c45ce11",
   "dpr": 1.0,
@@ -243,42 +243,42 @@
       "formula": "\\begin{align*} a&=b+c \\\\ d+e&=f \\end{align*}",
       "status": "rendered",
       "png": "0034.png",
-      "sha256": "617029f7a7c53a8cda3b4741dfb953f9a7b084fe2cc9fb3bfb88c322229cc378"
+      "sha256": "8fa72aa22671c14450fac901c32d4b92829cda3ebecfdb73f89a140dfaf6b283"
     },
     {
       "index": 35,
       "formula": "\\begin{align*} a&=b+c \\\\ d+e&=f \\end{align*}",
       "status": "rendered",
       "png": "0035.png",
-      "sha256": "617029f7a7c53a8cda3b4741dfb953f9a7b084fe2cc9fb3bfb88c322229cc378"
+      "sha256": "8fa72aa22671c14450fac901c32d4b92829cda3ebecfdb73f89a140dfaf6b283"
     },
     {
       "index": 36,
       "formula": "\\begin{aligned} a&=b+c \\\\ d+e&=f \\end{aligned}",
       "status": "rendered",
       "png": "0036.png",
-      "sha256": "617029f7a7c53a8cda3b4741dfb953f9a7b084fe2cc9fb3bfb88c322229cc378"
+      "sha256": "8fa72aa22671c14450fac901c32d4b92829cda3ebecfdb73f89a140dfaf6b283"
     },
     {
       "index": 37,
       "formula": "\\begin{alignat*}{2} 10&x+ &3&y = 2 \\\\ 3&x+&13&y = 4 \\end{alignat*}",
       "status": "rendered",
       "png": "0037.png",
-      "sha256": "7bb1a9f4c3a1267826ac0409808b52fcd6c40a282b5ff9a9b2a0aa5755f65894"
+      "sha256": "703c3a2137bdfff7b9c537958317e2005814e17c939c0f3a844d1a8915de4766"
     },
     {
       "index": 38,
       "formula": "\\begin{alignat*}{2} 10&x+ &3&y = 2 \\\\ 3&x+&13&y = 4 \\end{alignat*}",
       "status": "rendered",
       "png": "0038.png",
-      "sha256": "7bb1a9f4c3a1267826ac0409808b52fcd6c40a282b5ff9a9b2a0aa5755f65894"
+      "sha256": "703c3a2137bdfff7b9c537958317e2005814e17c939c0f3a844d1a8915de4766"
     },
     {
       "index": 39,
       "formula": "\\begin{alignedat}{2} 10&x+ &3&y = 2 \\\\ 3&x+&13&y = 4 \\end{alignedat}",
       "status": "rendered",
       "png": "0039.png",
-      "sha256": "7bb1a9f4c3a1267826ac0409808b52fcd6c40a282b5ff9a9b2a0aa5755f65894"
+      "sha256": "703c3a2137bdfff7b9c537958317e2005814e17c939c0f3a844d1a8915de4766"
     },
     {
       "index": 40,
@@ -915,7 +915,7 @@
       "formula": "\\boxed{ab}",
       "status": "rendered",
       "png": "0130.png",
-      "sha256": "ce018a1cb0219f9300b5c82a33da2d2e0aed2abfe7a16324d7ea17150253c057"
+      "sha256": "1db362bcb59a0826f7bcd13ddc448649624791dac5a44aff0bd4f331d51592d6"
     },
     {
       "index": 131,
@@ -1055,7 +1055,7 @@
       "formula": "\\begin{CD} A @>a>> B \\\\ @VbVV @AAcA \\\\ C @= D \\end{CD}",
       "status": "rendered",
       "png": "0150.png",
-      "sha256": "40f3a4d7bfd646c6d0e36ab726e37f732d71a5ca2a50d7f0709621be4117c2b2"
+      "sha256": "df07cfb5b3f48ebbf5b11e49a7470f513f2dc4656e8f1561c7cce5fd14b63c17"
     },
     {
       "index": 151,
@@ -2126,14 +2126,14 @@
       "formula": "\\fbox{Hi there!}",
       "status": "rendered",
       "png": "0303.png",
-      "sha256": "4017ed678256d31a7bcb4eb169f6c6fde30177cf5d489446341c30e41ac89b7a"
+      "sha256": "4b27f2a3b4f8d62a4c4195886ad29e6ef4cce5f218a0822f28ade28a7d5223dd"
     },
     {
       "index": 304,
       "formula": "\\fcolorbox{red}{aqua}{A}",
       "status": "rendered",
       "png": "0304.png",
-      "sha256": "68d15f61c0f91ae7e67ea5aa92d9ffa3e7c4bb3bd983e3ecbf17e59432541e65"
+      "sha256": "44f58ba1278c8fa5dcc4a898c0ea1e2473a52094ff6b5be83b728968319d5cfd"
     },
     {
       "index": 305,
@@ -2210,14 +2210,14 @@
       "formula": "\\begin{gather*} a=b \\\\ e=b+c \\end{gather*}",
       "status": "rendered",
       "png": "0315.png",
-      "sha256": "acebe22ab5f7f4415811854c164615fc26dec39c79919d090f43d5e2cb0bfa84"
+      "sha256": "6b4bcdfca123e0c7f083fcd1212de2010dc94684ad20a151875d491d533adab3"
     },
     {
       "index": 316,
       "formula": "\\begin{gathered} a=b \\\\ e=b+c \\end{gathered}",
       "status": "rendered",
       "png": "0316.png",
-      "sha256": "acebe22ab5f7f4415811854c164615fc26dec39c79919d090f43d5e2cb0bfa84"
+      "sha256": "6b4bcdfca123e0c7f083fcd1212de2010dc94684ad20a151875d491d533adab3"
     },
     {
       "index": 317,
@@ -3861,7 +3861,7 @@
       "formula": "\\begin{align*} a&=b+c \\\\ d+e&=f \\end{align*}",
       "status": "rendered",
       "png": "0551.png",
-      "sha256": "617029f7a7c53a8cda3b4741dfb953f9a7b084fe2cc9fb3bfb88c322229cc378"
+      "sha256": "8fa72aa22671c14450fac901c32d4b92829cda3ebecfdb73f89a140dfaf6b283"
     },
     {
       "index": 552,
@@ -3882,7 +3882,7 @@
       "formula": "\\begin{align*} a&=b+c \\\\ d+e&=f \\end{align*}",
       "status": "rendered",
       "png": "0554.png",
-      "sha256": "617029f7a7c53a8cda3b4741dfb953f9a7b084fe2cc9fb3bfb88c322229cc378"
+      "sha256": "8fa72aa22671c14450fac901c32d4b92829cda3ebecfdb73f89a140dfaf6b283"
     },
     {
       "index": 555,
@@ -5184,7 +5184,7 @@
       "formula": "\\begin{equation*} \\begin{split} a &=b+c\\\\ &=e+f \\end{split} \\end{equation*}",
       "status": "rendered",
       "png": "0740.png",
-      "sha256": "c838f800c09fc6ade92107bbb8f0fd2c3b26c350abf9174a964d8c3ea61586b1"
+      "sha256": "eb82718dfed7a78df9c03ec8b368a1a46a259142c3292eb03be3651f7c74cbc2"
     },
     {
       "index": 741,
@@ -6682,7 +6682,7 @@
       "formula": "\\begin{array}{|c|c|} \\hline 1 & 2 \\\\ \\hline 3 & 4 \\\\ \\hline \\end{array}",
       "status": "rendered",
       "png": "0954.png",
-      "sha256": "e1f8d6b5bdbbdd02d63a180bc0dac06921ecbc38fff751836e569149e084dfe3"
+      "sha256": "3a6ac6135cbfce046af2b6b1d970c478920331f34602d0e2aa7ef86bfc6483a0"
     },
     {
       "index": 955,
@@ -6696,98 +6696,98 @@
       "formula": "\\begin{CD} A @>f>> B \\\\ @VVV @VVV \\\\ C @>g>> D \\end{CD}",
       "status": "rendered",
       "png": "0956.png",
-      "sha256": "019c24893732db0c903383e553bda7f5f971901181de162cce08748ae64da69e"
+      "sha256": "fd48281ad92a9c117e48c4551683bee877a7086e42894055e29236b6bc8ecf4b"
     },
     {
       "index": 957,
       "formula": "\\begin{CD} A @= B \\\\ @| @| \\\\ C @= D \\end{CD}",
       "status": "rendered",
       "png": "0957.png",
-      "sha256": "b308d90515d85229f57a07454523400c05ce087bd78307bd18ba0abe042da302"
+      "sha256": "d3c34be776665eb23314ed04393f34948272602efd814946cd37839e41898114"
     },
     {
       "index": 958,
       "formula": "\\begin{CD} A @<f<< B \\\\ @AAA @AAA \\\\ C @<g<< D \\end{CD}",
       "status": "rendered",
       "png": "0958.png",
-      "sha256": "542df0f3e74242745603dab60d7fe23a25e4d7a7a058ae12f93727ad2b5db1ca"
+      "sha256": "e6ccec8a24e3f65df14f05ea453a53c39b8118bdada2e71a7fc243a85066424c"
     },
     {
       "index": 959,
       "formula": "\\begin{CD} A @>f>> B @>g>> C \\\\ @VVV @. @VVV \\\\ D @>h>> E @>k>> F \\end{CD}",
       "status": "rendered",
       "png": "0959.png",
-      "sha256": "516bd1f9fbec77393545071b5ea4389c4094a06b4cc2659ef867881307b34361"
+      "sha256": "0477700e60aa3a9f092b2b663110eb9b386ca4387b3243290b3c186ba4c91970"
     },
     {
       "index": 960,
       "formula": "\\begin{CD} 0 @>>> 1 @>>> 2 \\\\ @VVV @VVV @VVV \\\\ 3 @>>> 4 @>>> 5 \\\\ @VVV @VVV @VVV \\\\ 6 @>>> 7 @>>> 8 \\end{CD}",
       "status": "rendered",
       "png": "0960.png",
-      "sha256": "5d1c00b9aa5a409148da6156208e6cbede48587fd6f1ee6b4f08a750943c0231"
+      "sha256": "93b0218ed83df780e06495c6ff64ab6522f00fd878c62df2d59621fd4b47eb78"
     },
     {
       "index": 961,
       "formula": "\\begin{CD} A @>p>q>> B \\\\ @VVV @VVV \\\\ C @>r>s>> D \\end{CD}",
       "status": "rendered",
       "png": "0961.png",
-      "sha256": "56891092cc447b2b5c8692c4e351320c610c2dceb8b171e0fa01e00b1236bcc3"
+      "sha256": "a0758c409a795bf0cb96bca291111b7c6d3ee615700d06260021e2abff536c66"
     },
     {
       "index": 962,
       "formula": "\\begin{CD} X @>{\\alpha}>{}>> Y \\\\ @V{\\beta}V{}V @A{}A{\\gamma}A \\\\ Z @= W \\end{CD}",
       "status": "rendered",
       "png": "0962.png",
-      "sha256": "f065423a01a4fd87e7f74378e207136048b193e73732b79d5dd7af31d9d01de7"
+      "sha256": "b215d369427e314d56028c79855382a39b7def30f8273b6317acb1ee424d91e3"
     },
     {
       "index": 963,
       "formula": "\\begin{CD} X\\times Y @>>> Z \\\\ @VVV @VVV \\\\ A @>>> B \\end{CD}",
       "status": "rendered",
       "png": "0963.png",
-      "sha256": "30daaec026e59290f5b99cad76ab56eeeaa86e69aa7e492606de9ae30f9efedb"
+      "sha256": "e7817161ca65fa17a3870bf397869d5a39285e18255af30c3460243a59e8de47"
     },
     {
       "index": 964,
       "formula": "\\begin{CD} \\mathbb{Z} @>>> \\mathbb{Q} \\\\ @VVV @VVV \\\\ 0 @= 0 \\end{CD}",
       "status": "rendered",
       "png": "0964.png",
-      "sha256": "a17ff7f6544a77661e11792beb521d5aac1917b5f6c62984ddd1d71b0676d604"
+      "sha256": "98322e5ae959152f049ffba9de8d74473436b7d9e56ac476ab790d60628b8fd0"
     },
     {
       "index": 965,
       "formula": "\\begin{CD} E @<a<b<< F \\\\ @AAA @AAA \\\\ G @<c<d<< H \\end{CD}",
       "status": "rendered",
       "png": "0965.png",
-      "sha256": "c092b379c27d42942527a96a46b4453abeb33c35f08f17916f4623a20b79a8d8"
+      "sha256": "3f2aaac00715b12eda636b575323581f157d80439cd52e2e5b8dd61f19eb629c"
     },
     {
       "index": 966,
       "formula": "\\begin{CD} P @VpVqVV Q \\\\ @VVV @VVV \\\\ R @= S \\end{CD}",
       "status": "rendered",
       "png": "0966.png",
-      "sha256": "ab577489ac339bbccf2d910078eb7e672b387167768970a62e6dbcd5440c4749"
+      "sha256": "4496f73e7356728e299455211006a414ed6a12b92359e7bccc4c1d33d7dad3c2"
     },
     {
       "index": 967,
       "formula": "\\begin{CD} P @>>> Q \\\\ @VVV @. @VVV \\\\ R @>>> S \\\\ @VVV @VVV \\\\ T @>>> U \\end{CD}",
       "status": "rendered",
       "png": "0967.png",
-      "sha256": "540e1f9e0cb6275fff5c35d7fd41a4ba16429cd745892f0e6a287ccd805687f0"
+      "sha256": "e9c9267e99b7da9e47fdd0a6538d79b217930ee0ab2154bfc2b89f473698e4db"
     },
     {
       "index": 968,
       "formula": "\\begin{CD} W @>>> X \\\\ @| @| \\\\ Y @>>> Z \\end{CD}",
       "status": "rendered",
       "png": "0968.png",
-      "sha256": "db8d527441775280dbcc93d2e09ddcc19a26e5bb4c1657005b4b891519f7543e"
+      "sha256": "ac0207a983982d38567a9201e2f1e300fc70fd7fdc9cd438ee777f0df1081599"
     },
     {
       "index": 969,
       "formula": "\\begin{CD} \\operatorname{Hom}(A,B) @>>> \\mathrm{End}(V) \\\\ @VVV @VVV \\\\ 0 @>>> 1 \\end{CD}",
       "status": "rendered",
       "png": "0969.png",
-      "sha256": "ba2418dff8639d1693bd0a064260f2ac9e704224fe240142061d0e81d3a68edf"
+      "sha256": "79109e54376db488806612797f3b587ee19d861d5e1791325efb8585a4ecfc13"
     },
     {
       "index": 970,
@@ -6822,7 +6822,7 @@
       "formula": "\\def\\arraystretch{1.5}\\begin{array}{c:c:c} a & b & c \\\\ \\hline d & e & f \\\\ \\hdashline g & h & i \\end{array}",
       "status": "rendered",
       "png": "0974.png",
-      "sha256": "2fcd06fcec46d0cd234d24087b0420de77d1f4d369a812e0fde9f97a7baa99c2"
+      "sha256": "718d59f40fbf871bcba94688aa684fe07f6c4b9301f9aa20480e6ab0bd5498c7"
     },
     {
       "index": 975,
@@ -6899,7 +6899,7 @@
       "formula": "\\fcolorbox{red}{aqua}{$F=ma$}",
       "status": "rendered",
       "png": "0985.png",
-      "sha256": "cd01e4c9bc108ca3eb52a1fc907aa98edc69bd72eac7ef5d1caa90e083bca8ad"
+      "sha256": "870b8e066956895b29830dfea49cf14b9f694916ba243b64fd03457522df0fb1"
     },
     {
       "index": 986,
@@ -6941,35 +6941,35 @@
       "formula": "\\begin{equation} E=mc^2 \\end{equation}",
       "status": "rendered",
       "png": "0991.png",
-      "sha256": "fe7dcd31e90a71b198357a4c934f20f75f0e3d58ac943a6ba792c2bfd3976e24"
+      "sha256": "249db84027a8dc2da418199f731b93c81ca61aeb6f5267f9e795e3ffa4cf939c"
     },
     {
       "index": 992,
       "formula": "\\begin{align} x &= 1 \\\\ y &= 2 \\end{align}",
       "status": "rendered",
       "png": "0992.png",
-      "sha256": "d9cb1213491357a620d3ea6708c163802b6d51bb62d9bdda2401c02f6297964f"
+      "sha256": "534e710a90e2d1f38b04baca7adb41c77d8b8517736d6755ac01181741d1a679"
     },
     {
       "index": 993,
       "formula": "\\begin{gather} a=b \\\\ c=d \\end{gather}",
       "status": "rendered",
       "png": "0993.png",
-      "sha256": "e47de671b09930b3d88b3f8beed1ab2460ba765ba37b739f1158f13c2086f277"
+      "sha256": "18096ce327b0bb7870479a7f4179d8abc41e52a73a69840cf6d278410eae9e33"
     },
     {
       "index": 994,
       "formula": "\\begin{align} x &= 1 \\nonumber \\\\ y &= 2 \\end{align}",
       "status": "rendered",
       "png": "0994.png",
-      "sha256": "73508f931c7ec792c9c12b4112524a0b02bdcff4ce09246b1710271ae7a4cd9d"
+      "sha256": "9c3752e7d6f3754628fee87868bb8f0e14ddecb879635eb0101a15ef6a83cd91"
     },
     {
       "index": 995,
       "formula": "\\begin{align} x &= 1 \\tag{custom} \\\\ y &= 2 \\end{align}",
       "status": "rendered",
       "png": "0995.png",
-      "sha256": "d31f7dd4e489d0f2bacde292cd030daa1d10a8eec4559bdbc7d749a074a2461b"
+      "sha256": "56e404a298786460981bd6dada8bd8b9076d76d4304bd1c089b125ca61548e9d"
     },
     {
       "index": 996,
@@ -7256,7 +7256,7 @@
       "formula": "\\begin{CD} A @>a>> B \\\\ @VbVV @VcVV \\\\ C @>d>> D \\end{CD}",
       "status": "rendered",
       "png": "1036.png",
-      "sha256": "b844b3778b3dc95c12e2070b1854e8f8a8d08827dbd09a72d7cb5c2fc6e2343b"
+      "sha256": "ad71380ecd6b96ab296d8a46bebef3f22117d7194eb4a418a7f471f73a99b5ab"
     },
     {
       "index": 1037,

@@ -751,11 +751,24 @@ fn render_line(
 }
 
 fn render_rect(pixmap: &mut Pixmap, x: f32, y: f32, width: f32, height: f32, color: &Color) {
-    // Clamp to at least 2px: with width=1px at a fractional pixel position, fill_dot8's
-    // dot-8 fixed-point arithmetic can produce inner_width=0 and trigger a debug_assert.
-    // 2px guarantees at least 1 full interior pixel regardless of sub-pixel alignment.
-    let width = width.max(2.0);
-    let height = height.max(2.0);
+    // tiny-skia's fill_rect fast path requires a full interior pixel. Preserve
+    // sub-2px TeX rules by routing them through the anti-aliased path filler.
+    if width < 2.0 || height < 2.0 {
+        let Some(rect) = tiny_skia::Rect::from_xywh(x, y, width, height) else {
+            return;
+        };
+        let path = PathBuilder::from_rect(rect);
+        let mut paint = paint_for_color(color);
+        paint.anti_alias = true;
+        pixmap.fill_path(
+            &path,
+            &paint,
+            FillRule::Winding,
+            Transform::identity(),
+            None,
+        );
+        return;
+    }
     let rect = tiny_skia::Rect::from_xywh(x, y, width, height);
     if let Some(rect) = rect {
         let paint = paint_for_color(color);
