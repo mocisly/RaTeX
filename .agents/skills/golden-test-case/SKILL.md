@@ -30,7 +30,7 @@ From repo root:
 ./scripts/update_golden_output.sh
 ```
 
-Builds `ratex-render` / `render-svg`, writes main-suite PNGs to `tests/golden/output/` and SVGs to `tests/golden/output_svg/`; if `test_case_ce.txt` exists, also `output_ce/` and `output_svg_ce/` (mhchem uses `--dpr 2` to match reference pixel density).
+Builds `ratex-render` / `render-svg`, writes main-suite PNGs to `tests/golden/output/` and SVGs to `tests/golden/output_svg/`; if `test_case_ce.txt` exists, also `output_ce/` and `output_svg_ce/` (mhchem uses `--dpr 2` to match reference pixel density). It also writes a complete `render-manifest.json` in each PNG output directory, so failed cases remain present as indexed status records.
 
 Generate KaTeX reference PNGs (fixtures):
 
@@ -39,7 +39,7 @@ cd tools/golden_compare
 node generate_reference.mjs
 ```
 
-Defaults: read `tests/golden/test_cases.txt`, write `tests/golden/fixtures/`.
+Defaults: read `tests/golden/test_cases.txt`, write `tests/golden/fixtures/`. The generator is locked to KaTeX 0.16.45 and writes `reference-manifest.json` with actual KaTeX/Puppeteer/Chromium versions, DPR, font hashes, and one status record per formula.
 
 mhchem suite:
 
@@ -58,7 +58,7 @@ From repo root:
 python3 tools/golden_compare/compare_golden.py
 ```
 
-Defaults: `tests/golden/fixtures/` vs `tests/golden/output/` with `tests/golden/test_cases.txt`. Prints per-case ink metrics, combined **score**, pass rate, and score histogram.
+Defaults: `tests/golden/fixtures/` vs `tests/golden/output/` with `tests/golden/test_cases.txt`. The Python comparator is the only authoritative score source; Rust golden tests are smoke checks. It reports every formula index, including missing, failed, and policy-excluded cases.
 
 mhchem:
 
@@ -76,11 +76,18 @@ Run from **repo root** so default paths resolve. All paths may be absolute or re
 | `--fixtures DIR` | Reference PNG directory (default: `tests/golden/fixtures`, unless `--ce`). |
 | `--output DIR` | RaTeX PNG directory (default: `tests/golden/output`, unless `--ce`). |
 | `--test-cases FILE` | Case list for labels in output (default: `tests/golden/test_cases.txt`, unless `--ce`). |
-| `--threshold FLOAT` | Per-case pass threshold on combined score (default `0.30`). Exit code still uses overall pass rate ≥ 90%. |
+| `--policy FILE` | Explicit indexed exclusions. Main suite defaults to `tests/golden/policy.json`. |
+| `--threshold FLOAT` | Per-case pass threshold on combined score (default `0.30`). |
 | `--diff-dir DIR` | Write `NNNN_diff.png` (ref \| test \| colored diff). Creates `DIR` if missing. |
 | `--diff-from N` | **Requires `--diff-dir`.** Also write diffs for every case whose **1-based** index is ≥ `N` (matches `NNNN.png` stem, e.g. `0987.png` → `N=987`). |
 | `--diff-to N` | With `--diff-from`: inclusive upper bound on that same 1-based index. |
-| `--verbose` | More detailed logging. |
+| `--json-out FILE` | Write the versioned authoritative JSON report. |
+| `--csv-out FILE` | Write one flat machine-readable row per formula. |
+| `--fail-on-missing` | Fail on unapproved missing/error cases or integrity errors. |
+| `--min-coverage FLOAT` | Require eligible coverage from 0 to 1. |
+| `--min-mean FLOAT` | Require the coverage-adjusted mean; unscored cases count as zero. |
+| `--baseline-report FILE` | Compare indexed formulas with a previous JSON report. |
+| `--max-case-regression FLOAT` | With `--baseline-report`, fail any larger per-case drop. |
 
 **Diff behavior:** With `--diff-dir` only, diffs are written for **failing** cases (combined score strictly below `--threshold`). With `--diff-from`, diffs are written for every case in the index range (not only failures).
 
@@ -100,11 +107,16 @@ python3 tools/golden_compare/compare_golden.py --ce --threshold 0.35 --diff-dir 
 
 Add `tests/golden/diffs/` (or your chosen dir) to `.gitignore` unless the team commits diff PNGs for review.
 
+For a complete main baseline, prefer `./scripts/update_golden_baseline.sh`.
+It regenerates both image sides and writes `tests/golden/reports/main.json`
+plus `main.csv`. The website support table imports that JSON directly.
+
 ## Script arguments: `update_golden_output.sh` and `generate_reference.mjs`
 
 ### `scripts/update_golden_output.sh`
 
-- **No CLI arguments.** Paths are fixed inside the script (`tests/golden/test_cases.txt`, `output/`, `output_svg/`, and optionally `test_case_ce.txt` → `output_ce/`, `output_svg_ce/`).
+- Paths are fixed inside the script (`tests/golden/test_cases.txt`, `output/`, `output_svg/`, and optionally `test_case_ce.txt` → `output_ce/`, `output_svg_ce/`).
+- `--png-only` skips SVG builds/regeneration. The authoritative baseline helper and golden CI use this because the Python scorer consumes PNGs only.
 - Requires repo root layout and font locations described in **Prerequisites**.
 
 ### `tools/golden_compare/generate_reference.mjs`
@@ -112,7 +124,7 @@ Add `tests/golden/diffs/` (or your chosen dir) to `.gitignore` unless the team c
 Usage:
 
 ```text
-node generate_reference.mjs [test_cases.txt] [fixtures_dir] [--mhchem]
+node generate_reference.mjs [test_cases.txt] [fixtures_dir] [--mhchem] [--manifest-out FILE]
 ```
 
 | Position / flag | Meaning |
@@ -120,6 +132,7 @@ node generate_reference.mjs [test_cases.txt] [fixtures_dir] [--mhchem]
 | `[test_cases.txt]` | Optional. Default: `tests/golden/test_cases.txt` (resolved from repo layout). |
 | `[fixtures_dir]` | Optional. Default: `tests/golden/fixtures`. |
 | `--mhchem` | 40px font for mhchem; use with `test_case_ce.txt` → `fixtures_ce`. |
+| `--manifest-out FILE` | Override the default `<fixtures_dir>/reference-manifest.json`. |
 
 **mhchem** (from `tools/golden_compare`):
 
@@ -132,4 +145,4 @@ node generate_reference.mjs ../../tests/golden/test_case_ce.txt ../../tests/gold
 1. Edit `test_cases.txt` (or `test_case_ce.txt`).
 2. `./scripts/update_golden_output.sh`
 3. `cd tools/golden_compare && node generate_reference.mjs` (mhchem: pass paths and `--mhchem`).
-4. `python3 tools/golden_compare/compare_golden.py` (mhchem: add `--ce`); use `--diff-dir` and optionally `--diff-from` / `--diff-to` for diff PNGs.
+4. `python3 tools/golden_compare/compare_golden.py --json-out … --fail-on-missing` (mhchem: add `--ce`); use `--diff-dir` and optionally `--diff-from` / `--diff-to` for diff PNGs.

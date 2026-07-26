@@ -231,7 +231,7 @@ export const zh: TranslationDict = {
   supportTable: {
     eyebrow: "基准测试",
     heading: "公式支持表",
-    desc: "RaTeX（Rust + WASM）与 KaTeX 0.16.45 并排对比主 golden 套件中的每一行（公式列表以页面内嵌数据为准，主要源自 `tests/golden/test_cases.txt`；行数随仓库变化；另含 mhchem \\ce / \\pu 等条目）。离线格使用预计算的墨水 IoU 与 KaTeX 参考 PNG 对比；RaTeX 列由您浏览器中加载的 WASM 实时计算。bussproofs `prooftree` 因 KaTeX 没有对应渲染器，单独在证明树图库中跟踪。",
+    desc: "RaTeX（Rust + WASM）与 KaTeX 0.16.45 并排对比主 golden 套件中的每一行。公式行和离线墨水分数完全来自由 `tests/golden/test_cases.txt` 生成的同一份版本化 CI JSON 报告；RaTeX 列由您浏览器中加载的 WASM 实时计算。bussproofs `prooftree` 因 KaTeX 没有对应渲染器，单独在证明树图库中跟踪。",
     dataSourceLabel: "数据来源",
     dataSourceDescPrefix:
       "批量离线分数和聚合计数在 CI 运行中重新生成，可能比最新的",

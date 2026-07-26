@@ -231,7 +231,7 @@ export const en = {
   supportTable: {
     eyebrow: "Benchmarks",
     heading: "Formula support table",
-    desc: "RaTeX (Rust + WASM) vs KaTeX 0.16.45, row-by-row for the main golden suite (embedded page data; sourced primarily from `tests/golden/test_cases.txt` and related lists—line count follows the repo; includes mhchem \\ce / \\pu rows where present). Offline cells use pre-computed ink IoU vs KaTeX reference PNGs; the RaTeX column is computed live in your browser from the loaded WASM. bussproofs `prooftree` is tracked separately in the Proof trees gallery because KaTeX has no `prooftree` renderer.",
+    desc: "RaTeX (Rust + WASM) vs KaTeX 0.16.45, row-by-row for the main golden suite. Formula rows and offline ink scores come from the same versioned CI JSON report generated from `tests/golden/test_cases.txt`; the RaTeX column is computed live in your browser from the loaded WASM. bussproofs `prooftree` is tracked separately in the Proof trees gallery because KaTeX has no `prooftree` renderer.",
     dataSourceLabel: "Data source",
     dataSourceDescPrefix:
       "Batch offline scores and aggregate counts are regenerated in CI runs and may lag the latest",

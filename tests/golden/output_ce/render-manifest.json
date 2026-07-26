@@ -1,0 +1,732 @@
+{
+  "manifest_version": 1,
+  "kind": "ratex-render",
+  "generated_at": "2026-07-26T03:11:15.339507Z",
+  "test_cases": "tests/golden/test_case_ce.txt",
+  "test_cases_sha256": "333955e024cdd623c77d79e21108cff89cabfab77a4249edc93fe9cc3bb0b52e",
+  "dpr": 2.0,
+  "case_count": 103,
+  "cases": [
+    {
+      "index": 1,
+      "formula": "\\ce{CO2 + C -> 2 CO}",
+      "status": "rendered",
+      "png": "0001.png",
+      "sha256": "4a077dd8de15df8ad73fb1b33afc2945a6db59a4e5e2073b3a8f7370c5a062e3"
+    },
+    {
+      "index": 2,
+      "formula": "\\ce{Hg^2+ ->[I-] HgI2 ->[I-] [Hg^{II}I4]^2-}",
+      "status": "rendered",
+      "png": "0002.png",
+      "sha256": "b63432b61165d186f2526440548e683fea0ecbdd1413875935735beb069a3c59"
+    },
+    {
+      "index": 3,
+      "formula": "$C_p[\\ce{H2O(l)}] = \\pu{75.3 J // mol K}$",
+      "status": "rendered",
+      "png": "0003.png",
+      "sha256": "b7416b7b604765ea1c9867e8d52b7d2038b9d2c977b4ee83b27ba237a4f5859c"
+    },
+    {
+      "index": 4,
+      "formula": "\\ce{H2O}",
+      "status": "rendered",
+      "png": "0004.png",
+      "sha256": "3ac70f5410b0f72a8c5485f4ffb28d0bf5440f2a173c25b657c9acdff3c809ff"
+    },
+    {
+      "index": 5,
+      "formula": "\\ce{Sb2O3}",
+      "status": "rendered",
+      "png": "0005.png",
+      "sha256": "78a61223ba7a4f822b1fb0c3b3e889888e96172828e59f768f7bc54f158769bf"
+    },
+    {
+      "index": 6,
+      "formula": "\\ce{H+}",
+      "status": "rendered",
+      "png": "0006.png",
+      "sha256": "aa09a9ba673f8c003da2131aeb2d37deb4fef057dbefbccf09644087491e7ba9"
+    },
+    {
+      "index": 7,
+      "formula": "\\ce{CrO4^2-}",
+      "status": "rendered",
+      "png": "0007.png",
+      "sha256": "ebfb91152fabcccae20785035660f5082362958edec7fe5b2038e953f4421952"
+    },
+    {
+      "index": 8,
+      "formula": "\\ce{[AgCl2]-}",
+      "status": "rendered",
+      "png": "0008.png",
+      "sha256": "8532071a656ffd89c122dc9667c9522a044914895d62be7ae7583328008768ac"
+    },
+    {
+      "index": 9,
+      "formula": "\\ce{Y^99+}",
+      "status": "rendered",
+      "png": "0009.png",
+      "sha256": "036cc938923585409a97c4a41232b2d5c261ece3fd00a83953f7265770a8d122"
+    },
+    {
+      "index": 10,
+      "formula": "\\ce{Y^{99+}}",
+      "status": "rendered",
+      "png": "0010.png",
+      "sha256": "036cc938923585409a97c4a41232b2d5c261ece3fd00a83953f7265770a8d122"
+    },
+    {
+      "index": 11,
+      "formula": "\\ce{2 H2O}",
+      "status": "rendered",
+      "png": "0011.png",
+      "sha256": "51f2deceaadcff71c0284f3629d306be8f2dfc06bfdab074e622ddfbede17f80"
+    },
+    {
+      "index": 12,
+      "formula": "\\ce{2H2O}",
+      "status": "rendered",
+      "png": "0012.png",
+      "sha256": "51f2deceaadcff71c0284f3629d306be8f2dfc06bfdab074e622ddfbede17f80"
+    },
+    {
+      "index": 13,
+      "formula": "\\ce{0.5 H2O}",
+      "status": "rendered",
+      "png": "0013.png",
+      "sha256": "671e8d71c7c44593c23d8d4e67c201e41ac65bfb2a2bfcd224bb976c35ceef90"
+    },
+    {
+      "index": 14,
+      "formula": "\\ce{1/2 H2O}",
+      "status": "rendered",
+      "png": "0014.png",
+      "sha256": "ef7e848f53b25ae8294b2d975f4b7f467686cdc4af202d08b7d9b9cf55a99271"
+    },
+    {
+      "index": 15,
+      "formula": "\\ce{(1/2) H2O}",
+      "status": "rendered",
+      "png": "0015.png",
+      "sha256": "403f1d0c6aa9a666c1f3dc2eb7315dc3d946eca8324df5f32265f2d9c10ac96e"
+    },
+    {
+      "index": 16,
+      "formula": "\\ce{$n$ H2O}",
+      "status": "rendered",
+      "png": "0016.png",
+      "sha256": "17bbe2aa1b249cd262b416d99c38716af59974e09dda6749d10cb5512e1515bc"
+    },
+    {
+      "index": 17,
+      "formula": "\\ce{^{227}_{90}Th+}",
+      "status": "rendered",
+      "png": "0017.png",
+      "sha256": "1c6c29b85c41a0978d7fbd28c8ad328985bd5ab6772497d6588872f8cd0b0983"
+    },
+    {
+      "index": 18,
+      "formula": "\\ce{^227_90Th+}",
+      "status": "rendered",
+      "png": "0018.png",
+      "sha256": "1c6c29b85c41a0978d7fbd28c8ad328985bd5ab6772497d6588872f8cd0b0983"
+    },
+    {
+      "index": 19,
+      "formula": "\\ce{^{0}_{-1}n^{-}}",
+      "status": "rendered",
+      "png": "0019.png",
+      "sha256": "dc5131fa679ed941cb34a4c9d0a0360cf1488f9ccebfe9872a525da9d3192d87"
+    },
+    {
+      "index": 20,
+      "formula": "\\ce{^0_-1n-}",
+      "status": "rendered",
+      "png": "0020.png",
+      "sha256": "dc5131fa679ed941cb34a4c9d0a0360cf1488f9ccebfe9872a525da9d3192d87"
+    },
+    {
+      "index": 21,
+      "formula": "\\ce{H{}^3HO}",
+      "status": "rendered",
+      "png": "0021.png",
+      "sha256": "d961beeb1a894a8dd2bbfc580267702ad974e264e2ed30f798fbc671128c8f72"
+    },
+    {
+      "index": 22,
+      "formula": "\\ce{H^3HO}",
+      "status": "rendered",
+      "png": "0022.png",
+      "sha256": "d961beeb1a894a8dd2bbfc580267702ad974e264e2ed30f798fbc671128c8f72"
+    },
+    {
+      "index": 23,
+      "formula": "\\ce{A -> B}",
+      "status": "rendered",
+      "png": "0023.png",
+      "sha256": "e83aafbd05bbf78b7b2eaa2b4df8f2a4e35e44afc72cfd9a6f9544c4ab3a22db"
+    },
+    {
+      "index": 24,
+      "formula": "\\ce{A <- B}",
+      "status": "rendered",
+      "png": "0024.png",
+      "sha256": "cf1dcfcf74becdffac83f8246983c5f6acfc266dd3fca218d6a26307ff2c286a"
+    },
+    {
+      "index": 25,
+      "formula": "\\ce{A <-> B}",
+      "status": "rendered",
+      "png": "0025.png",
+      "sha256": "040d52dad873b01017aaabfd61bfdc1ed520c130abdbe3da0df79215073dbcee"
+    },
+    {
+      "index": 26,
+      "formula": "\\ce{A <--> B}",
+      "status": "rendered",
+      "png": "0026.png",
+      "sha256": "68a34f46bd6352912127db6b8bcbdb5c28239f9414ddcfcdd59a39d25a02c2ae"
+    },
+    {
+      "index": 27,
+      "formula": "\\ce{A <=> B}",
+      "status": "rendered",
+      "png": "0027.png",
+      "sha256": "dd242353e518789db35e7ab926d6c5f5ae85b95e2064d43a64fe9be035f28c75"
+    },
+    {
+      "index": 28,
+      "formula": "\\ce{A <=>> B}",
+      "status": "rendered",
+      "png": "0028.png",
+      "sha256": "f67d8096e346076a212bdd6d98f24e07c7a99fb18f2586efa8eaa149b4ea84a8"
+    },
+    {
+      "index": 29,
+      "formula": "\\ce{A <<=> B}",
+      "status": "rendered",
+      "png": "0029.png",
+      "sha256": "e209486aed6912fa3fa3cda31cd1dfcfa5952b8f3ffbafb802aa6fe381ba2ea7"
+    },
+    {
+      "index": 30,
+      "formula": "\\ce{A ->[H2O] B}",
+      "status": "rendered",
+      "png": "0030.png",
+      "sha256": "fc4e8b9ff3bf25b4f3d72fc8b313ef057b95f339ddddf84f23dedb1bc594a7f5"
+    },
+    {
+      "index": 31,
+      "formula": "\\ce{A ->[{text above}][{text below}] B}",
+      "status": "rendered",
+      "png": "0031.png",
+      "sha256": "7642a30ea52dbf34930adaf34fbc4333778dacce7d241ef234ec9b4a35f5edba"
+    },
+    {
+      "index": 32,
+      "formula": "\\ce{A ->[$x$][$x_i$] B}",
+      "status": "rendered",
+      "png": "0032.png",
+      "sha256": "13e86f1109e964a06a91667296d99e93c886f5bc9bf0423ab132d151e7de1beb"
+    },
+    {
+      "index": 33,
+      "formula": "\\ce{(NH4)2S}",
+      "status": "rendered",
+      "png": "0033.png",
+      "sha256": "411327573cb765a6046b223b4bf86ad6010977d70525db6f715f06f368098f0a"
+    },
+    {
+      "index": 34,
+      "formula": "\\ce{[\\{(X2)3\\}2]^3+}",
+      "status": "rendered",
+      "png": "0034.png",
+      "sha256": "35f3522d07e11477150bd6b4aa456f6fc67fab16b5f2e0b68ce1c2ddbdf8f05c"
+    },
+    {
+      "index": 35,
+      "formula": "\\ce{CH4 + 2 $\\left( \\ce{O2 + 79/21 N2} \\right)$}",
+      "status": "rendered",
+      "png": "0035.png",
+      "sha256": "ca1b57c7ee89c66edc9c56ec7e88c6bfc4f0d0e6d50e3e165b04c0b042212b4a"
+    },
+    {
+      "index": 36,
+      "formula": "\\ce{H2(aq)}",
+      "status": "rendered",
+      "png": "0036.png",
+      "sha256": "7d6a6b1a038541eb3ddd996faf0b385c4fd098f42e3390783b44245795517e00"
+    },
+    {
+      "index": 37,
+      "formula": "\\ce{CO3^2-_{(aq)}}",
+      "status": "rendered",
+      "png": "0037.png",
+      "sha256": "171b0bfd7363d2214424127173909dca8e4272f705809331d7851b20fd6e82e4"
+    },
+    {
+      "index": 38,
+      "formula": "\\ce{NaOH(aq,$\\infty$)}",
+      "status": "rendered",
+      "png": "0038.png",
+      "sha256": "6e9db1934b0399877a6567d057a10605eee75abd542001ad736d49001deb9271"
+    },
+    {
+      "index": 39,
+      "formula": "\\ce{ZnS($c$)}",
+      "status": "rendered",
+      "png": "0039.png",
+      "sha256": "05de3a8b89566834e39d5737ccf7b870783c8ecad6033c3ad643770e2323fdbf"
+    },
+    {
+      "index": 40,
+      "formula": "\\ce{ZnS(\\ca$c$)}",
+      "status": "rendered",
+      "png": "0040.png",
+      "sha256": "e43179349dfac7de405c4ac547db465a2bb8cdbecfb0b3deec3018d182ccd177"
+    },
+    {
+      "index": 41,
+      "formula": "\\ce{NO_x}",
+      "status": "rendered",
+      "png": "0041.png",
+      "sha256": "bafdad24da4a5174e24c8c04a649663ab5aac80d4448ea9bedf932647d4ba145"
+    },
+    {
+      "index": 42,
+      "formula": "\\ce{Fe^n+}",
+      "status": "rendered",
+      "png": "0042.png",
+      "sha256": "e7efa3c627de366cc515048f589ae487b024c49ca8b3ffe5604b8d0bddb30c7d"
+    },
+    {
+      "index": 43,
+      "formula": "\\ce{x Na(NH4)HPO4 ->[\\Delta] (NaPO3)_x + x NH3 ^ + x H2O}",
+      "status": "rendered",
+      "png": "0043.png",
+      "sha256": "0170739573cae354ae441a78658f24e0e2e31f853727a6abca542bbdd546fa79"
+    },
+    {
+      "index": 44,
+      "formula": "\\ce{\\mu-Cl}",
+      "status": "rendered",
+      "png": "0044.png",
+      "sha256": "9a2d81364a0395fc401afa1f208cd7f2b0b133b288cc541748fcf20afc09a893"
+    },
+    {
+      "index": 45,
+      "formula": "\\ce{[Pt(\\eta^2-C2H4)Cl3]-}",
+      "status": "rendered",
+      "png": "0045.png",
+      "sha256": "5ef77f74f04bce34f93e1c6216ebd866c22932811b4099eda17894e8fae01d63"
+    },
+    {
+      "index": 46,
+      "formula": "\\ce{\\beta +}",
+      "status": "rendered",
+      "png": "0046.png",
+      "sha256": "08b1e4e28efbf5c50fb7124fcbd4420584507f27814979041cfa73507fddaba4"
+    },
+    {
+      "index": 47,
+      "formula": "\\ce{^40_18Ar + \\gamma{} + \\nu_e}",
+      "status": "rendered",
+      "png": "0047.png",
+      "sha256": "09f09c2657f68750d541ee9071ce91f473f7c51ebf78410aef8761d9b20470e2"
+    },
+    {
+      "index": 48,
+      "formula": "\\ce{Fe(CN)_{$\\frac{6}{2}$}}",
+      "status": "rendered",
+      "png": "0048.png",
+      "sha256": "8a2d7f79969a2302a9265a9da8bbd0780968ae595306837e94855324392da965"
+    },
+    {
+      "index": 49,
+      "formula": "\\ce{X_{$i$}^{$x$}}",
+      "status": "rendered",
+      "png": "0049.png",
+      "sha256": "33d79dc1f5a7b4e75c32387e56cd5c981411dab1992aca8573b85289ab6a02e4"
+    },
+    {
+      "index": 50,
+      "formula": "\\ce{X_$i$^$x$}",
+      "status": "rendered",
+      "png": "0050.png",
+      "sha256": "33d79dc1f5a7b4e75c32387e56cd5c981411dab1992aca8573b85289ab6a02e4"
+    },
+    {
+      "index": 51,
+      "formula": "\\ce{$cis${-}[PtCl2(NH3)2]}",
+      "status": "rendered",
+      "png": "0051.png",
+      "sha256": "116605839c82ecaeb651c3812922db1b0ab0ac472566ebbb58275e4b49e4b3ea"
+    },
+    {
+      "index": 52,
+      "formula": "\\ce{CuS($hP12$)}",
+      "status": "rendered",
+      "png": "0052.png",
+      "sha256": "54374e6eb8f7d8ad8653cd03f6dbd8c8e68affc03a8aeec98116093f9f2e04b0"
+    },
+    {
+      "index": 53,
+      "formula": "\\ce{{Gluconic Acid} + H2O2}",
+      "status": "rendered",
+      "png": "0053.png",
+      "sha256": "fabec1c821279b38978992cb4e80d9636d55027985946e05f10d3510b6e808ef"
+    },
+    {
+      "index": 54,
+      "formula": "\\ce{X_{{red}}}",
+      "status": "rendered",
+      "png": "0054.png",
+      "sha256": "53b07037ebcf160a47960d9726c339cdabf3da44a6313bb879d7f51a8ebe76c3"
+    },
+    {
+      "index": 55,
+      "formula": "\\ce{{(+)}_589{-}[Co(en)3]Cl3}",
+      "status": "rendered",
+      "png": "0055.png",
+      "sha256": "48b7f4f455d32090c40fe80f4342cec08848f9c4b283a5b14020d902dab2a17a"
+    },
+    {
+      "index": 56,
+      "formula": "\\ce{C6H5-CHO}",
+      "status": "rendered",
+      "png": "0056.png",
+      "sha256": "1da592d7d670cb5b5a996752c4ceb7470ef8e13c070f379297c55a608534faa3"
+    },
+    {
+      "index": 57,
+      "formula": "\\ce{A-B=C#D}",
+      "status": "rendered",
+      "png": "0057.png",
+      "sha256": "5a9631881496825c31d01b3792d9de09fcbbda51ace008861a56bb0a32bab874"
+    },
+    {
+      "index": 58,
+      "formula": "\\ce{A\\bond{-}B\\bond{=}C\\bond{#}D}",
+      "status": "rendered",
+      "png": "0058.png",
+      "sha256": "5a9631881496825c31d01b3792d9de09fcbbda51ace008861a56bb0a32bab874"
+    },
+    {
+      "index": 59,
+      "formula": "\\ce{A\\bond{1}B\\bond{2}C\\bond{3}D}",
+      "status": "rendered",
+      "png": "0059.png",
+      "sha256": "5a9631881496825c31d01b3792d9de09fcbbda51ace008861a56bb0a32bab874"
+    },
+    {
+      "index": 60,
+      "formula": "\\ce{A\\bond{~}B\\bond{~-}C}",
+      "status": "rendered",
+      "png": "0060.png",
+      "sha256": "d9ca21074a86491c4e446f7f641f249c0b40360d06361730b8259a20372e2eaf"
+    },
+    {
+      "index": 61,
+      "formula": "\\ce{A\\bond{~--}B\\bond{~=}C\\bond{-~-}D}",
+      "status": "rendered",
+      "png": "0061.png",
+      "sha256": "89733a212704fee850cf6fcba2ed121392eecfda08e3e28685a587936f9eeae9"
+    },
+    {
+      "index": 62,
+      "formula": "\\ce{A\\bond{...}B\\bond{....}C}",
+      "status": "rendered",
+      "png": "0062.png",
+      "sha256": "7795dac004115fe88d19a25867ce54eebc37ddea517367e48587f0e0b2f60371"
+    },
+    {
+      "index": 63,
+      "formula": "\\ce{A\\bond{->}B\\bond{<-}C}",
+      "status": "rendered",
+      "png": "0063.png",
+      "sha256": "eb298d14eacda69042b13cc1134b85bcae0bed22086e46ac28185cd3183660d8"
+    },
+    {
+      "index": 64,
+      "formula": "\\ce{KCr(SO4)2*12H2O}",
+      "status": "rendered",
+      "png": "0064.png",
+      "sha256": "8a87dad76414d55e17b3421b7c2a4a43940d7909f105fd59f9d9e16e59c5d699"
+    },
+    {
+      "index": 65,
+      "formula": "\\ce{KCr(SO4)2.12H2O}",
+      "status": "rendered",
+      "png": "0065.png",
+      "sha256": "8a87dad76414d55e17b3421b7c2a4a43940d7909f105fd59f9d9e16e59c5d699"
+    },
+    {
+      "index": 66,
+      "formula": "\\ce{KCr(SO4)2 * 12 H2O}",
+      "status": "rendered",
+      "png": "0066.png",
+      "sha256": "8a87dad76414d55e17b3421b7c2a4a43940d7909f105fd59f9d9e16e59c5d699"
+    },
+    {
+      "index": 67,
+      "formula": "\\ce{Fe^{II}Fe^{III}2O4}",
+      "status": "rendered",
+      "png": "0067.png",
+      "sha256": "ced07e0bb3d83e213b7407cc334022ece5c7a76ef066459eaccb6d55786dd93c"
+    },
+    {
+      "index": 68,
+      "formula": "\\ce{OCO^{.-}}",
+      "status": "rendered",
+      "png": "0068.png",
+      "sha256": "56817f7be345acc9971353333973f0bd2d950b5fc496c0ca52b5174498bb9957"
+    },
+    {
+      "index": 69,
+      "formula": "\\ce{NO^{(2.)-}}",
+      "status": "rendered",
+      "png": "0069.png",
+      "sha256": "d9bf60ff8ffe11196d5cdc89e6830187c83686be7bf0ec29d4ec88e9b4539be6"
+    },
+    {
+      "index": 70,
+      "formula": "\\ce{Li^x_{Li,1-2x}Mg^._{Li,x}$V$'_{Li,x}Cl^x_{Cl}}",
+      "status": "rendered",
+      "png": "0070.png",
+      "sha256": "10ef7e277d64c29ddcb00fbc36e0d25ba691c0f13c2f90a1e13beebff016feda"
+    },
+    {
+      "index": 71,
+      "formula": "\\ce{O''_{i,x}}",
+      "status": "rendered",
+      "png": "0071.png",
+      "sha256": "774dc77ca471b2a2c56fba513a7eff571a22fff368c1091a35d9bb5ef1a652f9"
+    },
+    {
+      "index": 72,
+      "formula": "\\ce{M^{..}_i}",
+      "status": "rendered",
+      "png": "0072.png",
+      "sha256": "c050b06e38f8e1e4d1138ebc8ec779af484ebb566f49b4e1c76f07238991360a"
+    },
+    {
+      "index": 73,
+      "formula": "\\ce{$V$^{4'}_{Ti}}",
+      "status": "rendered",
+      "png": "0073.png",
+      "sha256": "418e806f9eecc9d5677e14a78c428fcdd4af6fdb4d607da84233ebab06249b4a"
+    },
+    {
+      "index": 74,
+      "formula": "\\ce{V_{V,1}C_{C,0.8}$V$_{C,0.2}}",
+      "status": "rendered",
+      "png": "0074.png",
+      "sha256": "5845ee58639b5a5ace7d39137c07d64146291061279470073246d78b0b56bda9"
+    },
+    {
+      "index": 75,
+      "formula": "\\ce{A + B}",
+      "status": "rendered",
+      "png": "0075.png",
+      "sha256": "0060562df70ae97f93004462ada1d02b2c65db46bb00462ef74bc5d2241aad06"
+    },
+    {
+      "index": 76,
+      "formula": "\\ce{A - B}",
+      "status": "rendered",
+      "png": "0076.png",
+      "sha256": "6734a85e8f8df80ca196351ae85e7091d6abf15a6c306be428c69ed710e742b3"
+    },
+    {
+      "index": 77,
+      "formula": "\\ce{A = B}",
+      "status": "rendered",
+      "png": "0077.png",
+      "sha256": "3af538bfa7b3920f2903d15a85349628adbded3f6260b8111a0c6c227d66edff"
+    },
+    {
+      "index": 78,
+      "formula": "\\ce{A \\pm B}",
+      "status": "rendered",
+      "png": "0078.png",
+      "sha256": "268e7e349d9ff013c164ff27db5f979d464ff5f275d4010924f723cf51d72eda"
+    },
+    {
+      "index": 79,
+      "formula": "\\ce{SO4^2- + Ba^2+ -> BaSO4 v}",
+      "status": "rendered",
+      "png": "0079.png",
+      "sha256": "89fd8041e29ab792876e04e6595d03c324df1bc91854f81c228ac54245a1aeff"
+    },
+    {
+      "index": 80,
+      "formula": "\\ce{A v B (v) -> B ^ B (^)}",
+      "status": "rendered",
+      "png": "0080.png",
+      "sha256": "d2d30ccb63545d53ac7b124c2e55f0b5de6fc60857bc446d41d7d14ee1ac26e0"
+    },
+    {
+      "index": 81,
+      "formula": "\\ce{NO^*}",
+      "status": "rendered",
+      "png": "0081.png",
+      "sha256": "d19c17bfc05cec86828ade8708a79e3a4fa39e17a4d8b8b201a1532f406918cf"
+    },
+    {
+      "index": 82,
+      "formula": "\\ce{1s^2-N}",
+      "status": "rendered",
+      "png": "0082.png",
+      "sha256": "398357cb359631fadf463a41ebdc86b08bca09e6d5a7f736836bf2db2920d177"
+    },
+    {
+      "index": 83,
+      "formula": "\\ce{n-Pr}",
+      "status": "rendered",
+      "png": "0083.png",
+      "sha256": "ae4aa782940b2784b00dcce014cb6b5878aa3583d229f7c2bf83124ea07846ac"
+    },
+    {
+      "index": 84,
+      "formula": "\\ce{iPr}",
+      "status": "rendered",
+      "png": "0084.png",
+      "sha256": "88452748ad9174c906d7179f608a74b3e0f83b76cbe0940a99632622ae5b5520"
+    },
+    {
+      "index": 85,
+      "formula": "\\ce{\\ca Fe}",
+      "status": "rendered",
+      "png": "0085.png",
+      "sha256": "7ae683e6b481f8b7ec28d0350c71641c151fb28a5faed3f40696d099f3830ab0"
+    },
+    {
+      "index": 86,
+      "formula": "\\ce{A, B, C; F}",
+      "status": "rendered",
+      "png": "0086.png",
+      "sha256": "268e898bc606a24ccbc2549aee30d76644312c4f1676dde84a30e0d8959dee8e"
+    },
+    {
+      "index": 87,
+      "formula": "\\ce{{and others}}",
+      "status": "rendered",
+      "png": "0087.png",
+      "sha256": "4d379ef43169d541b196f0eef92a7a7ae4db7874d639bcc1ead80a4daff0a89e"
+    },
+    {
+      "index": 88,
+      "formula": "\\ce{Zn^2+  <=>[+ 2OH-][+ 2H+]  $\\underset{\\text{amphoteres Hydroxid}}{\\ce{Zn(OH)2 v}}$  <=>[+ 2OH-][+ 2H+]  $\\underset{\\text{Hydroxozikat}}{\\ce{[Zn(OH)4]^2-}}$}",
+      "status": "rendered",
+      "png": "0088.png",
+      "sha256": "e0c78aee943b2efcca1e61fed182169ffe153154868c65875755852e3d454a40"
+    },
+    {
+      "index": 89,
+      "formula": "\\ce{$K = \\frac{[\\ce{Hg^2+}][\\ce{Hg}]}{[\\ce{Hg2^2+}]}$}",
+      "status": "rendered",
+      "png": "0089.png",
+      "sha256": "8d060918a0f60dd67b9d3183c8854fe794e2729cfa2218195510985b81e7928f"
+    },
+    {
+      "index": 90,
+      "formula": "\\ce{$K = \\ce{\\frac{[Hg^2+][Hg]}{[Hg2^2+]}}$}",
+      "status": "rendered",
+      "png": "0090.png",
+      "sha256": "8d060918a0f60dd67b9d3183c8854fe794e2729cfa2218195510985b81e7928f"
+    },
+    {
+      "index": 91,
+      "formula": "\\ce{Hg^2+ ->[I-]  $\\underset{\\mathrm{red}}{\\ce{HgI2}}$  ->[I-]  $\\underset{\\mathrm{red}}{\\ce{[Hg^{II}I4]^2-}}$}",
+      "status": "rendered",
+      "png": "0091.png",
+      "sha256": "4ec89b285a55a6a0f3a517ebad5150c3c206c520b803e0fb2257ac2559e835b2"
+    },
+    {
+      "index": 92,
+      "formula": "\\pu{123 kJ}",
+      "status": "rendered",
+      "png": "0092.png",
+      "sha256": "9ba796d2f64ceae06cb2849fd0be1e3d5aafe9230c242c6d8ab0310bf84be786"
+    },
+    {
+      "index": 93,
+      "formula": "\\pu{123 mm2}",
+      "status": "rendered",
+      "png": "0093.png",
+      "sha256": "804ccfe1bbb4187007d3e33b8078c3aac6a7a6d60de8f205e7f9a402c21bd25e"
+    },
+    {
+      "index": 94,
+      "formula": "\\pu{123 J s}",
+      "status": "rendered",
+      "png": "0094.png",
+      "sha256": "875cccb38730ee0957fa61723f7599db6fbe650d471c4983336e471516716513"
+    },
+    {
+      "index": 95,
+      "formula": "\\pu{123 J*s}",
+      "status": "rendered",
+      "png": "0095.png",
+      "sha256": "b108b4a7bd453725279b2ce02132135c01cb81896428afaeeab0624bcc5d89e1"
+    },
+    {
+      "index": 96,
+      "formula": "\\pu{123 kJ/mol}",
+      "status": "rendered",
+      "png": "0096.png",
+      "sha256": "b49de31f0cc7b239058febb05e789b36db08ed90fe555aa5e9ccddfd4dab1fc4"
+    },
+    {
+      "index": 97,
+      "formula": "\\pu{123 kJ//mol}",
+      "status": "rendered",
+      "png": "0097.png",
+      "sha256": "a07c63f9458e038ac6e46406c4a2a127312dcda2ab6aef4544b001aa05bdfc09"
+    },
+    {
+      "index": 98,
+      "formula": "\\pu{123 kJ mol-1}",
+      "status": "rendered",
+      "png": "0098.png",
+      "sha256": "ac8d24a2f07b7f1c199119f92c65d552099a0c49aec7aa986cca8432ab61ec0d"
+    },
+    {
+      "index": 99,
+      "formula": "\\pu{123 kJ*mol-1}",
+      "status": "rendered",
+      "png": "0099.png",
+      "sha256": "a78b9488601ae974b5bc2c2777ece2b0abd57fb209d18253b5196258e6670c56"
+    },
+    {
+      "index": 100,
+      "formula": "\\pu{1.2e3 kJ}",
+      "status": "rendered",
+      "png": "0100.png",
+      "sha256": "6f50437505a673b08df8c676319058b6fd96052fedb872edea1a4e6ab94718b2"
+    },
+    {
+      "index": 101,
+      "formula": "\\pu{1,2e3 kJ}",
+      "status": "rendered",
+      "png": "0101.png",
+      "sha256": "78c271855cdc8ad0bd4da1c9db8d3edd12b9b72a115b06f9551341ba24078249"
+    },
+    {
+      "index": 102,
+      "formula": "\\pu{1.2E3 kJ}",
+      "status": "rendered",
+      "png": "0102.png",
+      "sha256": "1b371b9089af4bc29acb2c215ff148ac0746d63c37f772f25fd605687d7d33ec"
+    },
+    {
+      "index": 103,
+      "formula": "\\pu{1,2E3 kJ}",
+      "status": "rendered",
+      "png": "0103.png",
+      "sha256": "152ecf2a936b412904b9373a28b97fac5402377df486143f3dcedc7214790dad"
+    }
+  ]
+}
