@@ -1,11 +1,11 @@
 {
   "manifest_version": 1,
   "kind": "ratex-render",
-  "generated_at": "2026-07-26T15:28:54.559998Z",
+  "generated_at": "2026-07-26T16:47:28.248956Z",
   "test_cases": "tests/golden/test_cases.txt",
-  "test_cases_sha256": "2bfd67bb3e05bab0edd969f4641c2f32266a0d78216be153e5e4da8f84bf2352",
+  "test_cases_sha256": "e9f31c82e74e67fbceb6b3323ba6004f94b9a4aca1db704f04a2dedd2368d16e",
   "dpr": 1.0,
-  "case_count": 1073,
+  "case_count": 1075,
   "cases": [
     {
       "index": 1,
@@ -7516,6 +7516,20 @@
       "status": "rendered",
       "png": "1073.png",
       "sha256": "a1d83cb2ac9b51f1cc25bcfd66c7f344ff4dd7cf5989491368988987a9e85337"
+    },
+    {
+      "index": 1074,
+      "formula": "\\scriptstyle\\dddot{x}\\quad\\scriptscriptstyle\\ddddot{x}",
+      "status": "rendered",
+      "png": "1074.png",
+      "sha256": "63c0022f5e9822b115798176e9fcb5eb23158343d5d55cef41f3a218ce7fa77c"
+    },
+    {
+      "index": 1075,
+      "formula": "x_{\\dddot{y}}\\quad x_{\\ddddot{y}}",
+      "status": "rendered",
+      "png": "1075.png",
+      "sha256": "1b332bb1a7da1ddd7a4c80b03d9e63fdb92484b9c8e79400ddbee740765fc646"
     }
   ]
 }

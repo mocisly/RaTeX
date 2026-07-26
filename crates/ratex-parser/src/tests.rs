@@ -1265,6 +1265,13 @@ mod recursion_limit {
     }
 
     #[test]
+    fn contextual_dots_expansion_depth_is_bounded() {
+        assert!(parse(&r"\dots".repeat(32)).is_ok());
+        assert_recursion_limit_err(&r"\dots".repeat(33));
+        assert_recursion_limit_err(&r"\dots".repeat(300));
+    }
+
+    #[test]
     fn runtime_depth_ignores_non_structural_braces() {
         assert!(parse(&format!(r"\verb|{}|", "{".repeat(300))).is_ok());
         assert!(parse(&format!(r"\verbéà{}é", "{".repeat(300))).is_ok());

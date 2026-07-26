@@ -14,6 +14,7 @@ const reportSummary = goldenReport.summary;
 const reportSource = goldenReport.source;
 const renderedMean = reportSummary.rendered_mean.toFixed(3);
 const coverage = `${(reportSummary.coverage * 100).toFixed(2)}%`;
+const reportCommit = `${reportSource.commit_sha.slice(0, 12)}${reportSource.working_tree_dirty ? "+dirty" : ""}`;
 const supportCases = goldenReport.cases.map(({ index, formula, status, score }) => ({
   index,
   formula,
@@ -198,7 +199,7 @@ const filterIdle =
         <dl class="mb-8 grid max-w-5xl grid-cols-2 gap-px overflow-hidden rounded-[12px] border border-outline/40 bg-outline/30 text-sm sm:grid-cols-4">
           <div class="bg-white p-4">
             <dt class="text-[10px] font-label uppercase tracking-wider text-on-surface-variant">Commit</dt>
-            <dd class="mt-1 font-mono text-xs text-zinc-900" title={reportSource.commit_sha}>{reportSource.commit_sha.slice(0, 12)}</dd>
+            <dd class="mt-1 font-mono text-xs text-zinc-900" title={reportSource.commit_sha}>{reportCommit}</dd>
           </div>
           <div class="bg-white p-4">
             <dt class="text-[10px] font-label uppercase tracking-wider text-on-surface-variant">Suite hash</dt>

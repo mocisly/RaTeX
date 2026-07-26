@@ -702,6 +702,10 @@ impl<'a> MacroExpander<'a> {
         self.macros.set(
             "\\dots".to_string(),
             MacroDefinition::Function(|me: &mut MacroExpander| -> ParseResult<Vec<Token>> {
+                let _guard = me
+                    .depth_budget
+                    .enter()
+                    .map_err(|_| ParseError::recursion_limit_exceeded())?;
                 me.expand_once(false)?;
                 let next = me.future().text.clone();
                 Ok(lex_string_to_stack_tokens(contextual_dots_for(&next)))

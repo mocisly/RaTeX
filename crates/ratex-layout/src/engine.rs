@@ -1906,10 +1906,15 @@ fn padded_to_width(body: LayoutBox, width: f64) -> LayoutBox {
 /// actual dot disks here instead: their advance and clearance are stable math
 /// geometry and no longer inherit text-run behavior.
 fn layout_multidot_accent(body: LayoutBox, dot_count: usize, options: &LayoutOptions) -> LayoutBox {
+    // The KaTeX macro wraps its dot payload in \normalsize. Explicit
+    // \scriptstyle and script placement scale this entire box later, so
+    // compensate here to keep only the mark at normal text size.
+    let normal_size_scale = 1.0 / options.size_multiplier();
     let advance = get_char_metrics(FontId::MainRegular, '.' as u32)
         .map(|metrics| metrics.width)
-        .unwrap_or(0.27778);
-    let radius = 0.07_f64;
+        .unwrap_or(0.27778)
+        * normal_size_scale;
+    let radius = 0.07_f64 * normal_size_scale;
     let mark_width = advance * dot_count as f64;
     let mark_height = radius * 2.0;
     let bezier = 0.552_284_749_8_f64;
@@ -6652,6 +6657,43 @@ mod vertical_delimiter_geometry_tests {
 #[cfg(test)]
 mod shared_stretchy_geometry_tests {
     use super::*;
+
+    fn test_box(width: f64, height: f64, depth: f64) -> LayoutBox {
+        LayoutBox {
+            width,
+            height,
+            depth,
+            content: BoxContent::Empty,
+            color: Color::BLACK,
+        }
+    }
+
+    fn physical_multidot_dimensions(style: MathStyle) -> (f64, f64, f64) {
+        let options = LayoutOptions::default().with_style(style);
+        let accent = layout_multidot_accent(test_box(0.4, 0.4, 0.1), 3, &options);
+        let mark = match &accent.content {
+            BoxContent::Accent { accent, .. } => accent,
+            other => panic!("expected accent box, got {other:?}"),
+        };
+        let scale = options.size_multiplier();
+        (
+            mark.width * scale,
+            mark.height * scale,
+            accent.width * scale,
+        )
+    }
+
+    #[test]
+    fn multidot_marks_keep_normal_size_in_script_styles() {
+        let display = physical_multidot_dimensions(MathStyle::Display);
+
+        for style in [MathStyle::Script, MathStyle::ScriptScript] {
+            let actual = physical_multidot_dimensions(style);
+            assert!((actual.0 - display.0).abs() < 1e-9);
+            assert!((actual.1 - display.1).abs() < 1e-9);
+            assert!((actual.2 - display.2).abs() < 1e-9);
+        }
+    }
 
     #[test]
     fn stretchy_specs_derive_clearance_from_font_rule_metrics() {

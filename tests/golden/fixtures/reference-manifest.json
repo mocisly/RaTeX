@@ -1,10 +1,10 @@
 {
   "manifest_version": 1,
   "kind": "katex-reference",
-  "generated_at": "2026-07-26T15:12:50.377Z",
+  "generated_at": "2026-07-26T16:49:04.766Z",
   "test_cases": "tests/golden/test_cases.txt",
-  "test_cases_sha256": "2bfd67bb3e05bab0edd969f4641c2f32266a0d78216be153e5e4da8f84bf2352",
-  "case_count": 1073,
+  "test_cases_sha256": "e9f31c82e74e67fbceb6b3323ba6004f94b9a4aca1db704f04a2dedd2368d16e",
+  "case_count": 1075,
   "katex_version": "0.16.45",
   "puppeteer_version": "24.38.0",
   "chromium_revision": "146.0.7680.31",
@@ -7584,6 +7584,20 @@
       "status": "rendered",
       "png": "1073.png",
       "sha256": "41ef0cbbc7f9525230f2db9168fab4f7135016d8ac104b8d130eb72e7f5178d1"
+    },
+    {
+      "index": 1074,
+      "formula": "\\scriptstyle\\dddot{x}\\quad\\scriptscriptstyle\\ddddot{x}",
+      "status": "rendered",
+      "png": "1074.png",
+      "sha256": "ec13a339c5eac15d3b89660d1b95554f25a0edd8cdc9643fc978a6c55a2d0dde"
+    },
+    {
+      "index": 1075,
+      "formula": "x_{\\dddot{y}}\\quad x_{\\ddddot{y}}",
+      "status": "rendered",
+      "png": "1075.png",
+      "sha256": "9837d151ab06e8e6f86cdc0c133b373d24da6d355bb9af936bae89eb9ee5d806"
     }
   ]
 }

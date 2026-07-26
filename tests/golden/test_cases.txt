@@ -1071,3 +1071,5 @@ a · b
 \displaystyle\sum\nolimits_{n=1}^{\infty} x_n
 \displaystyle\lim_{x\to0} f(x)
 \textstyle\lim\limits_{x\to0} f(x)
+\scriptstyle\dddot{x}\quad\scriptscriptstyle\ddddot{x}
+x_{\dddot{y}}\quad x_{\ddddot{y}}
