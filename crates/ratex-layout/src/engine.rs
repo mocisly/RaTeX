@@ -9,7 +9,7 @@ use ratex_types::math_style::MathStyle;
 use ratex_types::path_command::PathCommand;
 
 use crate::hbox::make_hbox;
-use crate::layout_box::{BoxContent, LayoutBox, PlacedBox, ProofRule};
+use crate::layout_box::{BoxContent, LayoutBox, PlacedBox, ProofRule, RunGlyph};
 use crate::layout_options::LayoutOptions;
 
 use crate::katex_svg::parse_svg_path_data;
@@ -1848,6 +1848,99 @@ fn glyph_skew(lb: &LayoutBox) -> f64 {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StretchyPlacement {
+    Above,
+    Below,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct StretchySpec {
+    placement: StretchyPlacement,
+    gap: f64,
+}
+
+impl StretchySpec {
+    fn accent(label: &str, is_below: bool, options: &LayoutOptions) -> Self {
+        Self {
+            placement: if is_below {
+                StretchyPlacement::Below
+            } else {
+                StretchyPlacement::Above
+            },
+            // KaTeX accentunder.ts assigns only \utilde a 0.12em kern.
+            gap: if label == "\\utilde" {
+                3.0 * options.metrics().default_rule_thickness
+            } else {
+                0.0
+            },
+        }
+    }
+
+    fn horizontal_brace(is_over: bool, options: &LayoutOptions) -> Self {
+        Self {
+            placement: if is_over {
+                StretchyPlacement::Above
+            } else {
+                StretchyPlacement::Below
+            },
+            // KaTeX's 0.1em brace kern is 2.5 default rule units.
+            gap: 2.5 * options.metrics().default_rule_thickness,
+        }
+    }
+}
+
+fn padded_to_width(body: LayoutBox, width: f64) -> LayoutBox {
+    if width <= body.width + f64::EPSILON {
+        return body;
+    }
+    let pad = (width - body.width) / 2.0;
+    make_hbox(vec![
+        LayoutBox::new_kern(pad),
+        body,
+        LayoutBox::new_kern(pad),
+    ])
+}
+
+/// Place a top-origin stretchy path with a shared clearance model.
+fn compose_stretchy(
+    base: LayoutBox,
+    accent: LayoutBox,
+    spec: StretchySpec,
+    skew: f64,
+    color: Color,
+) -> LayoutBox {
+    debug_assert!(accent.height.abs() <= 0.001);
+    debug_assert!((base.width - accent.width).abs() <= 0.001);
+
+    let is_below = spec.placement == StretchyPlacement::Below;
+    let clearance = if is_below {
+        base.height + base.depth + spec.gap
+    } else {
+        base.height + spec.gap
+    };
+    let (height, depth) = if is_below {
+        (base.height, base.depth + spec.gap + accent.depth)
+    } else {
+        (base.height + spec.gap + accent.depth, base.depth)
+    };
+
+    LayoutBox {
+        width: base.width,
+        height,
+        depth,
+        content: BoxContent::Accent {
+            base: Box::new(base),
+            accent: Box::new(accent),
+            clearance,
+            skew,
+            is_below,
+            under_gap_em: if is_below { spec.gap } else { 0.0 },
+        },
+        color,
+    }
+}
+
 fn layout_accent(
     label: &str,
     base: &ParseNode,
@@ -1867,7 +1960,8 @@ fn layout_accent(
     // Try KaTeX exact SVG paths first (widehat, widetilde, overgroup, etc.).
     // The path width must stay inside the accent box; renderers size their canvas from
     // DisplayList.width, so drawing wider than the box clips in an enclosing HBox.
-    let accent_target_w = base_w;
+    let accent_target_w =
+        base_w.max(crate::katex_svg::katex_stretchy_min_width_em(label).unwrap_or(0.0));
     if let Some((commands, w, h, fill)) =
         crate::katex_svg::katex_accent_path(label, accent_target_w, accent_ordgroup_len(base))
     {
@@ -1879,42 +1973,27 @@ fn layout_accent(
             content: BoxContent::SvgPath { commands, fill },
             color: options.color,
         };
+        if label != "\\vec" {
+            let body_box = padded_to_width(body_box, w);
+            return compose_stretchy(
+                body_box,
+                accent_box,
+                StretchySpec::accent(label, is_below, options),
+                0.0,
+                options.color,
+            );
+        }
+
         // KaTeX `accent.ts` uses `clearance = min(body.height, xHeight)` for ordinary accents.
-        // That matches fixed-size `\vec` (svgData.vec); using it for *width-scaled* SVG accents
-        // (\widehat, \widetilde, \overgroup, …) pulls the path down onto the base (golden 0604/0885/0886).
-        // Slightly tighter than 0.08em — aligns wide SVG hats with KaTeX PNG crops (e.g. 0935).
-        let gap = 0.065;
-        let under_gap_em = if is_below && label == "\\utilde" {
-            0.12
+        // KaTeX: clearance = min(body.height, xHeight) is used as *overlap* (kern down).
+        // Equivalent RaTeX position: vec bottom = body.height - overlap.
+        let clearance = (body_box.height - options.metrics().x_height).max(0.0);
+        let (height, depth) = (clearance + h, body_box.depth);
+        let vec_skew = (if is_shifty {
+            glyph_skew(&body_box)
         } else {
             0.0
-        };
-        let clearance = if is_below {
-            body_box.height + body_box.depth + gap
-        } else if label == "\\vec" {
-            // KaTeX: clearance = min(body.height, xHeight) is used as *overlap* (kern down).
-            // Equivalent RaTeX position: vec bottom = body.height - overlap = max(0, body.height - xHeight).
-            (body_box.height - options.metrics().x_height).max(0.0)
-        } else {
-            body_box.height + gap
-        };
-        let (height, depth) = if is_below {
-            (body_box.height, body_box.depth + h + gap + under_gap_em)
-        } else if label == "\\vec" {
-            // Box height = clearance + H_EM, matching KaTeX VList height.
-            (clearance + h, body_box.depth)
-        } else {
-            (body_box.height + gap + h, body_box.depth)
-        };
-        let vec_skew = if label == "\\vec" {
-            (if is_shifty {
-                glyph_skew(&body_box)
-            } else {
-                0.0
-            }) + VEC_SKEW_EXTRA_RIGHT_EM
-        } else {
-            0.0
-        };
+        }) + VEC_SKEW_EXTRA_RIGHT_EM;
         return LayoutBox {
             width: body_box.width,
             height,
@@ -1925,7 +2004,7 @@ fn layout_accent(
                 clearance,
                 skew: vec_skew,
                 is_below,
-                under_gap_em,
+                under_gap_em: 0.0,
             },
             color: options.color,
         };
@@ -1936,21 +2015,21 @@ fn layout_accent(
 
     let accent_box = if use_arrow_path {
         let (commands, arrow_h, fill_arrow) =
-            match crate::katex_svg::katex_stretchy_path(label, base_w) {
+            match crate::katex_svg::katex_stretchy_path(label, accent_target_w) {
                 Some((c, h)) => (c, h, true),
                 None => {
                     let h = 0.3_f64;
-                    let c = stretchy_accent_path(label, base_w, h);
+                    let c = stretchy_accent_path(label, accent_target_w, h);
                     let fill = label == "\\xtwoheadrightarrow" || label == "\\xtwoheadleftarrow";
                     (c, h, fill)
                 }
             };
         LayoutBox {
-            width: base_w,
-            height: arrow_h / 2.0,
-            depth: arrow_h / 2.0,
+            width: accent_target_w,
+            height: 0.0,
+            depth: arrow_h,
             content: BoxContent::SvgPath {
-                commands,
+                commands: shift_path_y(commands, arrow_h / 2.0),
                 fill: fill_arrow,
             },
             color: options.color,
@@ -1985,9 +2064,18 @@ fn layout_accent(
         }
     };
 
-    let skew = if use_arrow_path {
-        0.0
-    } else if is_shifty {
+    if use_arrow_path {
+        let body_box = padded_to_width(body_box, accent_box.width);
+        return compose_stretchy(
+            body_box,
+            accent_box,
+            StretchySpec::accent(label, is_below, options),
+            0.0,
+            options.color,
+        );
+    }
+
+    let skew = if is_shifty {
         // For shifty accents (\hat, \tilde, etc.) shift by the BASE character's skew,
         // which encodes the italic correction in math-italic fonts (e.g. M → 0.083em).
         glyph_skew(&body_box)
@@ -1995,28 +2083,8 @@ fn layout_accent(
         0.0
     };
 
-    // gap = clearance between body top and bottom of accent SVG.
-    // For arrow accents, the SVG path is centered (height=h/2, depth=h/2).
-    // The gap prevents the visible arrowhead / harpoon tip from overlapping the base top.
-    //
-    // KaTeX stretchy arrows with vb_height 522 have h/2 ≈ 0.261em; default gap=0.12 left
-    // too little room for tall caps (`\overleftrightarrow{AB}`, `\overleftarrow{AB}`,
-    // `\overleftharpoon{AB}`, …).  `\Overrightarrow` uses a taller glyph (vb 560) and keeps
-    // the slightly smaller kern used in prior tuning.
-    let gap = if use_arrow_path {
-        if label == "\\Overrightarrow" {
-            0.21
-        } else {
-            0.26
-        }
-    } else {
-        0.0
-    };
-
     let clearance = if is_below {
-        body_box.height + body_box.depth + accent_box.depth + gap
-    } else if use_arrow_path {
-        body_box.height + gap
+        body_box.height + body_box.depth + accent_box.depth
     } else {
         // Clearance = how high above baseline the accent is positioned.
         // - For simple letters (M, b, o): body_box.height is the letter top → use directly.
@@ -2106,10 +2174,8 @@ fn layout_accent(
     let (height, depth) = if is_below {
         (
             body_box.height,
-            body_box.depth + accent_box.height + accent_box.depth + gap,
+            body_box.depth + accent_box.height + accent_box.depth,
         )
-    } else if use_arrow_path {
-        (body_box.height + gap + accent_box.height, body_box.depth)
     } else {
         // to_display.rs shifts every glyph accent DOWN by max(0, accent.height - 0.35),
         // so the actual visual top of the accent mark = clearance + min(0.35, accent.height).
@@ -2380,6 +2446,28 @@ fn is_double_vert_delim(delim: &str) -> bool {
     matches!(delim, "\\|" | "\\Vert" | "\\lVert" | "\\rVert")
 }
 
+#[derive(Debug, Clone, Copy)]
+struct VertDelimGeometry {
+    width: f64,
+    height: f64,
+    depth: f64,
+    view_box_height: i64,
+    middle_height: i64,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum VertDelimKind {
+    Stretchy,
+    Sized,
+}
+
+/// Fixed em scale of the locked KaTeX reference wrapper (`.katex` is 1.21em).
+///
+/// The golden renderer uses a 40px base em while the browser SVG is rasterized
+/// through that wrapper. Apply one suite-wide scale to sized paths instead of
+/// the previous height-dependent per-command multipliers.
+const KATEX_SIZED_DELIM_SCALE: f64 = 1.2;
+
 /// KaTeX `delimiter.makeStackedDelim`: total span of one repeat piece (U+2223 / U+2225) in Size1-Regular.
 fn vert_repeat_piece_height(is_double: bool) -> f64 {
     let code = if is_double { 8741_u32 } else { 8739 };
@@ -2388,20 +2476,36 @@ fn vert_repeat_piece_height(is_double: bool) -> f64 {
         .unwrap_or(0.5)
 }
 
-/// Match KaTeX `realHeightTotal` for stack-always `|` / `\Vert` delimiters.
-fn katex_vert_real_height(requested_total: f64, is_double: bool, is_sized_delim: bool) -> f64 {
+/// Match KaTeX `makeStackedDelim` for stack-always `|` / `\Vert` delimiters.
+///
+/// This object is the single source of truth for the SVG viewBox, TeX box
+/// bounds, and axis split. Keeping those values together avoids scaling the
+/// path independently from the box that contains it.
+fn stacked_vert_geometry(
+    requested_total: f64,
+    is_double: bool,
+    kind: VertDelimKind,
+    options: &LayoutOptions,
+) -> VertDelimGeometry {
     let piece = vert_repeat_piece_height(is_double);
-    let min_h = 2.0 * piece;
-    let repeat_count = ((requested_total - min_h) / piece).ceil().max(0.0);
-    let mut h = min_h + repeat_count * piece;
-    // KaTeX's sized vertical bars are CSS SVG spans with a slightly taller ink
-    // crop in browser screenshots than our native path rasterization. Keep this
-    // adjustment scoped to \big/\Big/\bigg/\Bigg so ordinary stretchy \left bars
-    // still follow content height directly.
-    if is_sized_delim && !is_double {
-        h *= if requested_total < 3.0 { 1.2 } else { 1.135 };
+    let minimum_total = 2.0 * piece;
+    let repeat_count = ((requested_total - minimum_total) / piece).ceil().max(0.0);
+    let logical_total = minimum_total + repeat_count * piece;
+    let axis = options.metrics().axis_height;
+    let logical_depth = logical_total / 2.0 - axis;
+    let logical_height = logical_total - logical_depth;
+    let scale = match kind {
+        VertDelimKind::Stretchy => 1.0,
+        VertDelimKind::Sized => KATEX_SIZED_DELIM_SCALE,
+    };
+
+    VertDelimGeometry {
+        width: if is_double { 0.556 } else { 0.333 },
+        height: logical_height * scale,
+        depth: logical_depth * scale,
+        view_box_height: (logical_total * 1000.0).round() as i64,
+        middle_height: ((logical_total - minimum_total) * 1000.0).round() as i64,
     }
-    h
 }
 
 /// KaTeX `svgGeometry.tallDelim` paths for `"vert"` / `"doublevert"` (viewBox units per em width).
@@ -2511,6 +2615,28 @@ fn make_shortmid_box(options: &LayoutOptions) -> LayoutBox {
         content: BoxContent::SvgPath {
             commands,
             fill: true,
+        },
+        color: options.color,
+    }
+}
+
+/// Natural Main-Regular U+2223/U+2225 delimiter.
+///
+/// KaTeX traverses the small-glyph sequence before choosing a stacked SVG.
+/// Keeping the natural form as a glyph preserves its font hinting; only the
+/// stacked form needs path geometry.
+fn make_natural_vert_delim_box(is_double: bool, options: &LayoutOptions) -> LayoutBox {
+    let char_code = if is_double { 8741 } else { 8739 };
+    let metrics = get_char_metrics(FontId::MainRegular, char_code)
+        .expect("KaTeX Main-Regular vertical delimiter metrics");
+
+    LayoutBox {
+        width: metrics.width,
+        height: metrics.height,
+        depth: metrics.depth,
+        content: BoxContent::Glyph {
+            font_id: FontId::MainRegular,
+            char_code,
         },
         color: options.color,
     }
@@ -2653,29 +2779,24 @@ fn make_measured_by_symbol(options: &LayoutOptions) -> LayoutBox {
 fn make_vert_delim_box(
     total_height: f64,
     is_double: bool,
-    is_sized_delim: bool,
+    kind: VertDelimKind,
     options: &LayoutOptions,
 ) -> LayoutBox {
-    let real_h = katex_vert_real_height(total_height, is_double, is_sized_delim);
-    let axis = options.metrics().axis_height;
-    let depth = (real_h / 2.0 - axis).max(0.0);
-    let height = real_h - depth;
-    let width = if is_double { 0.556 } else { 0.333 };
-
-    let piece = vert_repeat_piece_height(is_double);
-    let mid_em = (real_h - 2.0 * piece).max(0.0);
-    let mid_th = (mid_em * 1000.0).round() as i64;
-    let view_box_height = (real_h * 1000.0).round() as i64;
-
-    let d = tall_vert_svg_path_data(mid_th, is_double);
+    let geometry = stacked_vert_geometry(total_height, is_double, kind, options);
+    let d = tall_vert_svg_path_data(geometry.middle_height, is_double);
     let raw = parse_svg_path_data(&d);
     let scaled = scale_svg_path_to_em(&raw);
-    let commands = map_vert_path_y_to_baseline(scaled, height, depth, view_box_height);
+    let commands = map_vert_path_y_to_baseline(
+        scaled,
+        geometry.height,
+        geometry.depth,
+        geometry.view_box_height,
+    );
 
     LayoutBox {
-        width,
-        height,
-        depth,
+        width: geometry.width,
+        height: geometry.height,
+        depth: geometry.depth,
         content: BoxContent::SvgPath {
             commands,
             fill: true,
@@ -2692,13 +2813,22 @@ fn make_stretchy_delim(delim: &str, total_height: f64, options: &LayoutOptions) 
 
     // stackAlwaysDelimiters: use SVG path only when the required height exceeds
     // the natural font-glyph height (1.0em for single vert, same for double).
-    // When the content is small enough, fall through to the normal font glyph.
+    // Natural bars keep font hinting; stacked bars use the unified path/box
+    // geometry above.
     const VERT_NATURAL_HEIGHT: f64 = 1.0; // MainRegular |: 0.75+0.25
-    if is_vert_delim(delim) && total_height > VERT_NATURAL_HEIGHT {
-        return make_vert_delim_box(total_height, false, false, options);
+    if is_vert_delim(delim) {
+        return if total_height > VERT_NATURAL_HEIGHT {
+            make_vert_delim_box(total_height, false, VertDelimKind::Stretchy, options)
+        } else {
+            make_natural_vert_delim_box(false, options)
+        };
     }
-    if is_double_vert_delim(delim) && total_height > VERT_NATURAL_HEIGHT {
-        return make_vert_delim_box(total_height, true, false, options);
+    if is_double_vert_delim(delim) {
+        return if total_height > VERT_NATURAL_HEIGHT {
+            make_vert_delim_box(total_height, true, VertDelimKind::Stretchy, options)
+        } else {
+            make_natural_vert_delim_box(true, options)
+        };
     }
 
     // Normalize < > to \langle \rangle for proper angle bracket glyphs
@@ -2753,11 +2883,11 @@ fn layout_delim_sizing(size: u8, delim: &str, options: &LayoutOptions) -> Layout
     // stackAlwaysDelimiters: render as SVG path at the fixed size height
     if is_vert_delim(delim) {
         let total = SIZE_TO_MAX_HEIGHT[size.min(4) as usize];
-        return make_vert_delim_box(total, false, true, options);
+        return make_vert_delim_box(total, false, VertDelimKind::Sized, options);
     }
     if is_double_vert_delim(delim) {
         let total = SIZE_TO_MAX_HEIGHT[size.min(4) as usize];
-        return make_vert_delim_box(total, true, true, options);
+        return make_vert_delim_box(total, true, VertDelimKind::Sized, options);
     }
 
     // Normalize angle brackets to proper math angle bracket glyphs
@@ -3273,13 +3403,68 @@ fn layout_verb(body: &str, star: bool, options: &LayoutOptions) -> LayoutBox {
     hbox
 }
 
-/// Lay out `\text{…}` / `HBox` contents as a simple horizontal row.
-///
-/// KaTeX's HTML builder may merge consecutive text symbols into **one** DOM text run; the
-/// browser then applies OpenType kerning (GPOS) on that run. We place each character using
-/// bundled TeX metrics only (no GPOS), so compared to Puppeteer+KaTeX PNGs, long `\text{…}`
-/// strings can appear slightly wider with a small cumulative horizontal shift — not a wrong
-/// font file, but a shaping model difference.
+fn glyph_run_box(children: Vec<LayoutBox>, color: Color) -> LayoutBox {
+    let width = children.iter().map(|child| child.width).sum();
+    let height = children
+        .iter()
+        .map(|child| child.height)
+        .fold(0.0_f64, f64::max);
+    let depth = children
+        .iter()
+        .map(|child| child.depth)
+        .fold(0.0_f64, f64::max);
+    let mut x = 0.0;
+    let glyphs = children
+        .into_iter()
+        .map(|child| {
+            let BoxContent::Glyph { font_id, char_code } = child.content else {
+                unreachable!("glyph_run_box only accepts glyph boxes");
+            };
+            let glyph = RunGlyph {
+                x,
+                font_id,
+                char_code,
+            };
+            x += child.width;
+            glyph
+        })
+        .collect();
+
+    LayoutBox {
+        width,
+        height,
+        depth,
+        content: BoxContent::GlyphRun { glyphs },
+        color,
+    }
+}
+
+/// Coalesce adjacent glyphs into internal text runs while retaining structural
+/// boxes (accents, inline math, spacing commands, fallback images) as run
+/// boundaries.
+fn make_text_runs(children: Vec<LayoutBox>, color: Color) -> LayoutBox {
+    let mut output = Vec::new();
+    let mut pending_glyphs = Vec::new();
+
+    let flush = |pending: &mut Vec<LayoutBox>, output: &mut Vec<LayoutBox>| {
+        if !pending.is_empty() {
+            output.push(glyph_run_box(std::mem::take(pending), color));
+        }
+    };
+
+    for child in children {
+        if matches!(child.content, BoxContent::Glyph { .. }) && child.color == color {
+            pending_glyphs.push(child);
+        } else {
+            flush(&mut pending_glyphs, &mut output);
+            output.push(child);
+        }
+    }
+    flush(&mut pending_glyphs, &mut output);
+    make_hbox(output)
+}
+
+/// Lay out `\text{…}` / `HBox` contents as positioned glyph runs.
 fn layout_text(body: &[ParseNode], options: &LayoutOptions) -> LayoutBox {
     let mut children = Vec::new();
     for node in body {
@@ -3295,7 +3480,7 @@ fn layout_text(body: &[ParseNode], options: &LayoutOptions) -> LayoutBox {
             }
         }
     }
-    make_hbox(children)
+    make_text_runs(children, options.color)
 }
 
 /// Layout \pmb — poor man's bold via CSS-style text shadow.
@@ -3652,8 +3837,18 @@ fn layout_angl(body: &ParseNode, options: &LayoutOptions) -> LayoutBox {
 }
 
 fn layout_font(font: &str, body: &ParseNode, options: &LayoutOptions) -> LayoutBox {
+    if matches!(font, "text" | "\\text") {
+        return match body {
+            ParseNode::OrdGroup { body, .. } => layout_text(body, options),
+            _ => layout_node(body, options),
+        };
+    }
+
     let font_id = match font {
-        "mathrm" | "\\mathrm" | "textrm" | "\\textrm" | "rm" | "\\rm" => Some(FontId::MainRegular),
+        "textnormal" | "\\textnormal" | "textmd" | "\\textmd" | "textup" | "\\textup"
+        | "mathrm" | "\\mathrm" | "textrm" | "\\textrm" | "rm" | "\\rm" => {
+            Some(FontId::MainRegular)
+        }
         "mathbf" | "\\mathbf" | "textbf" | "\\textbf" | "bf" | "\\bf" => Some(FontId::MainBold),
         "mathit" | "\\mathit" | "it" | "\\it" => Some(FontId::MathItalic),
         "textit" | "\\textit" | "\\emph" => Some(FontId::MainItalic),
@@ -3677,15 +3872,11 @@ fn layout_font(font: &str, body: &ParseNode, options: &LayoutOptions) -> LayoutB
 fn layout_with_font(node: &ParseNode, font_id: FontId, options: &LayoutOptions) -> LayoutBox {
     match node {
         ParseNode::OrdGroup { body, .. } => {
-            let kern = options.inter_glyph_kern_em;
-            let mut children: Vec<LayoutBox> = Vec::with_capacity(body.len().saturating_mul(2));
-            for (i, n) in body.iter().enumerate() {
-                if i > 0 && kern > 0.0 {
-                    children.push(LayoutBox::new_kern(kern));
-                }
-                children.push(layout_with_font(n, font_id, options));
-            }
-            make_hbox(children)
+            let children = body
+                .iter()
+                .map(|node| layout_with_font(node, font_id, options))
+                .collect();
+            make_text_runs(children, options.color)
         }
         ParseNode::SupSub { base, sup, sub, .. } => {
             if let Some(base_node) = base.as_deref() {
@@ -3741,21 +3932,49 @@ fn layout_with_font(node: &ParseNode, font_id: FontId, options: &LayoutOptions) 
 // Overline / Underline
 // ============================================================================
 
+#[derive(Debug, Clone, Copy)]
+struct RuleGeometry {
+    thickness: f64,
+    line_center_offset: f64,
+    total_extent: f64,
+}
+
+impl RuleGeometry {
+    fn overline(options: &LayoutOptions) -> Self {
+        let thickness = options.metrics().default_rule_thickness;
+        Self {
+            thickness,
+            // KaTeX vlist: 3r clearance, then the r-thick rule.
+            line_center_offset: 3.5 * thickness,
+            // One additional rule unit is retained at the outer edge.
+            total_extent: 5.0 * thickness,
+        }
+    }
+
+    fn underline(options: &LayoutOptions) -> Self {
+        let thickness = options.metrics().default_rule_thickness;
+        Self {
+            thickness,
+            line_center_offset: 4.0 * thickness,
+            total_extent: 4.5 * thickness,
+        }
+    }
+}
+
 fn layout_overline(body: &ParseNode, options: &LayoutOptions) -> LayoutBox {
     let cramped = options.with_style(options.style.cramped());
     let body_box = layout_node(body, &cramped);
-    let metrics = options.metrics();
-    let rule = metrics.default_rule_thickness;
+    let rule = RuleGeometry::overline(options);
 
-    // Total height: body height + 2*rule clearance + rule thickness = body.height + 3*rule
-    let height = body_box.height + 3.0 * rule;
+    let height = body_box.height + rule.total_extent;
     LayoutBox {
         width: body_box.width,
         height,
         depth: body_box.depth,
         content: BoxContent::Overline {
             body: Box::new(body_box),
-            rule_thickness: rule,
+            rule_thickness: rule.thickness,
+            offset: rule.line_center_offset,
         },
         color: options.color,
     }
@@ -3763,19 +3982,17 @@ fn layout_overline(body: &ParseNode, options: &LayoutOptions) -> LayoutBox {
 
 fn layout_underline(body: &ParseNode, options: &LayoutOptions) -> LayoutBox {
     let body_box = layout_node(body, options);
-    let metrics = options.metrics();
-    let rule = metrics.default_rule_thickness;
-    let offset = 4.0 * rule;
+    let rule = RuleGeometry::underline(options);
 
-    let depth = body_box.depth + offset + 0.5 * rule;
+    let depth = body_box.depth + rule.total_extent;
     LayoutBox {
         width: body_box.width,
         height: body_box.height,
         depth,
         content: BoxContent::Underline {
             body: Box::new(body_box),
-            rule_thickness: rule,
-            offset,
+            rule_thickness: rule.thickness,
+            offset: rule.line_center_offset,
         },
         color: options.color,
     }
@@ -3784,14 +4001,9 @@ fn layout_underline(body: &ParseNode, options: &LayoutOptions) -> LayoutBox {
 /// `\href` / `\url`: link color on the glyphs and an underline in the same color (KaTeX-style).
 fn layout_href(body: &[ParseNode], options: &LayoutOptions) -> LayoutBox {
     let link_color = Color::from_name("blue").unwrap_or_else(|| Color::rgb(0.0, 0.0, 1.0));
-    // Slight tracking matches KaTeX/browser monospace link width in golden PNGs.
-    let body_opts = options.with_color(link_color).with_inter_glyph_kern(0.05);
+    let body_opts = options.with_color(link_color);
     let body_box = layout_expression(body, &body_opts, true);
-    if box_contains_font(&body_box, FontId::TypewriterRegular) {
-        layout_link_underline_laid_out(body_box, options, link_color)
-    } else {
-        layout_underline_laid_out(body_box, options, link_color)
-    }
+    layout_link_underline_laid_out(body_box, options, link_color)
 }
 
 /// Same geometry as [`layout_underline`], but for an already computed inner box.
@@ -3825,21 +4037,6 @@ fn layout_underline_laid_out_with_rule(
     }
 }
 
-fn box_contains_font(lbox: &LayoutBox, font_id: FontId) -> bool {
-    let mut pending = vec![lbox];
-    while let Some(current) = pending.pop() {
-        match &current.content {
-            BoxContent::Glyph { font_id: fid, .. } if *fid == font_id => return true,
-            BoxContent::HBox(children) => pending.extend(children.iter()),
-            BoxContent::Scaled { body, .. } | BoxContent::RaiseBox { body, .. } => {
-                pending.push(body);
-            }
-            _ => {}
-        }
-    }
-    false
-}
-
 fn link_underline_skip_cuts(lbox: &LayoutBox, x: f64, scale: f64, cuts: &mut Vec<(f64, f64)>) {
     let mut pending = vec![(lbox, x, scale)];
     while let Some((current, current_x, current_scale)) = pending.pop() {
@@ -3862,6 +4059,26 @@ fn link_underline_skip_cuts(lbox: &LayoutBox, x: f64, scale: f64, cuts: &mut Vec
                             current_x + current.width * current_scale - pad,
                         ));
                     }
+                }
+            }
+            BoxContent::GlyphRun { glyphs } => {
+                for (index, glyph) in glyphs.iter().enumerate() {
+                    let Some(ch) = char::from_u32(glyph.char_code) else {
+                        continue;
+                    };
+                    if !matches!(ch, 'g' | 'j' | 'p' | 'q' | 'y') {
+                        continue;
+                    }
+                    let glyph_right = glyphs
+                        .get(index + 1)
+                        .map(|next| next.x)
+                        .unwrap_or(current.width);
+                    let glyph_width = (glyph_right - glyph.x).max(0.0);
+                    let pad = (0.04 * current_scale).min(glyph_width * current_scale / 3.0);
+                    cuts.push((
+                        current_x + glyph.x * current_scale + pad,
+                        current_x + glyph_right * current_scale - pad,
+                    ));
                 }
             }
             BoxContent::Scaled { body, child_scale } => {
@@ -3910,14 +4127,18 @@ fn layout_link_underline_laid_out(
 ) -> LayoutBox {
     let metrics = options.metrics();
     let rule = metrics.default_rule_thickness;
-    let offset = 2.5 * rule;
+    // Browser text decoration uses the font underline position measured from
+    // the baseline. Keep it out of a descender's ink box when the run is
+    // deeper than that nominal position.
+    let center_from_baseline = body_box.depth.max(3.125 * rule);
+    let offset = center_from_baseline - body_box.depth;
     let segments = link_underline_segments(&body_box);
     if segments.len() <= 1 {
         return layout_underline_laid_out_with_rule(body_box, rule, offset, color);
     }
 
     let height = body_box.height;
-    let depth = body_box.depth + offset + 0.5 * rule;
+    let depth = body_box.depth.max(center_from_baseline + 0.5 * rule);
     let rule_y = height + body_box.depth + offset;
     let width = body_box.width;
     LayoutBox {
@@ -4134,7 +4355,6 @@ fn layout_horiz_brace(
     options: &LayoutOptions,
 ) -> LayoutBox {
     let body_box = layout_node(base, options);
-    let w = body_box.width.max(0.5);
 
     let is_bracket = func_label.trim_start_matches('\\').ends_with("bracket");
 
@@ -4150,6 +4370,9 @@ fn layout_horiz_brace(
     } else {
         "underbrace"
     };
+    let w = body_box
+        .width
+        .max(crate::katex_svg::katex_stretchy_min_width_em(stretch_key).unwrap_or(0.5));
 
     let (raw_commands, brace_h, brace_fill) =
         match crate::katex_svg::katex_stretchy_path(stretch_key, w) {
@@ -4179,34 +4402,13 @@ fn layout_horiz_brace(
         color: options.color,
     };
 
-    let gap = 0.1;
-    let (height, depth) = if is_over {
-        (body_box.height + brace_h + gap, body_box.depth)
-    } else {
-        (body_box.height, body_box.depth + brace_h + gap)
-    };
-
-    let clearance = if is_over {
-        height - brace_h
-    } else {
-        body_box.height + body_box.depth + gap
-    };
-    let total_w = body_box.width;
-
-    LayoutBox {
-        width: total_w,
-        height,
-        depth,
-        content: BoxContent::Accent {
-            base: Box::new(body_box),
-            accent: Box::new(brace_box),
-            clearance,
-            skew: 0.0,
-            is_below: !is_over,
-            under_gap_em: 0.0,
-        },
-        color: options.color,
-    }
+    compose_stretchy(
+        padded_to_width(body_box, w),
+        brace_box,
+        StretchySpec::horizontal_brace(is_over, options),
+        0.0,
+        options.color,
+    )
 }
 
 // ============================================================================
@@ -5205,9 +5407,12 @@ fn layout_cd_arrow(
             let big_total = SIZE_TO_MAX_HEIGHT[2]; // 1.8em
 
             let shaft_box = match direction {
-                "vert_eq" if target_size > 0.0 => {
-                    make_vert_delim_box(target_size.max(big_total), true, false, options)
-                }
+                "vert_eq" if target_size > 0.0 => make_vert_delim_box(
+                    target_size.max(big_total),
+                    true,
+                    VertDelimKind::Stretchy,
+                    options,
+                ),
                 "vert_eq" => make_stretchy_delim("\\Vert", big_total, options),
                 "down" if target_size > 0.0 => {
                     cd_stretch_vert_arrow_box(target_size.max(1.0), true, options)
@@ -5955,6 +6160,116 @@ mod missing_glyph_width_em_tests {
     #[test]
     fn latin_without_metrics_stays_half_em() {
         assert_eq!(missing_glyph_width_em('z'), 0.5);
+    }
+}
+
+#[cfg(test)]
+mod vertical_delimiter_geometry_tests {
+    use super::*;
+
+    fn path_y_bounds(commands: &[PathCommand]) -> (f64, f64) {
+        let mut min_y = f64::INFINITY;
+        let mut max_y = f64::NEG_INFINITY;
+        let mut include = |y: f64| {
+            min_y = min_y.min(y);
+            max_y = max_y.max(y);
+        };
+        for command in commands {
+            match command {
+                PathCommand::MoveTo { y, .. } | PathCommand::LineTo { y, .. } => include(*y),
+                PathCommand::CubicTo { y1, y2, y, .. } => {
+                    include(*y1);
+                    include(*y2);
+                    include(*y);
+                }
+                PathCommand::QuadTo { y1, y, .. } => {
+                    include(*y1);
+                    include(*y);
+                }
+                PathCommand::Close => {}
+            }
+        }
+        (min_y, max_y)
+    }
+
+    #[test]
+    fn stacked_vertical_delimiters_use_exact_katex_repeat_counts() {
+        let options = LayoutOptions::default();
+        let piece = vert_repeat_piece_height(false);
+
+        for (requested, repeats) in [(1.2, 0.0), (1.8, 1.0), (2.4, 2.0), (3.0, 3.0)] {
+            let geometry = stacked_vert_geometry(requested, false, VertDelimKind::Sized, &options);
+            let expected_total = (2.0 + repeats) * piece * KATEX_SIZED_DELIM_SCALE;
+            assert!((geometry.height + geometry.depth - expected_total).abs() < 1e-9);
+            assert!(
+                (geometry.height
+                    - geometry.depth
+                    - 2.0 * options.metrics().axis_height * KATEX_SIZED_DELIM_SCALE)
+                    .abs()
+                    < 1e-9
+            );
+        }
+    }
+
+    #[test]
+    fn stacked_vertical_bar_path_matches_box_bounds() {
+        let options = LayoutOptions::default();
+        let bar = make_vert_delim_box(2.4, false, VertDelimKind::Sized, &options);
+        let BoxContent::SvgPath { commands, .. } = &bar.content else {
+            panic!("stacked vertical bar must be a path");
+        };
+        let (min_y, max_y) = path_y_bounds(commands);
+        assert!((min_y + bar.height).abs() < 1e-9);
+        assert!((max_y - bar.depth).abs() < 1e-9);
+    }
+
+    #[test]
+    fn natural_vertical_bar_uses_main_regular_metrics() {
+        let options = LayoutOptions::default();
+        let bar = make_natural_vert_delim_box(false, &options);
+        let BoxContent::Glyph { font_id, char_code } = bar.content else {
+            panic!("natural vertical bar must be a glyph");
+        };
+        let metrics = get_char_metrics(FontId::MainRegular, 8739).unwrap();
+        assert_eq!(font_id, FontId::MainRegular);
+        assert_eq!(char_code, 8739);
+        assert_eq!(bar.width, metrics.width);
+        assert_eq!(bar.height, metrics.height);
+        assert_eq!(bar.depth, metrics.depth);
+    }
+}
+
+#[cfg(test)]
+mod shared_stretchy_geometry_tests {
+    use super::*;
+
+    #[test]
+    fn stretchy_specs_derive_clearance_from_font_rule_metrics() {
+        let options = LayoutOptions::default();
+        let rule = options.metrics().default_rule_thickness;
+
+        let widehat = StretchySpec::accent("\\widehat", false, &options);
+        assert_eq!(widehat.placement, StretchyPlacement::Above);
+        assert_eq!(widehat.gap, 0.0);
+
+        let utilde = StretchySpec::accent("\\utilde", true, &options);
+        assert_eq!(utilde.placement, StretchyPlacement::Below);
+        assert!((utilde.gap - 3.0 * rule).abs() < 1e-9);
+
+        let underbrace = StretchySpec::horizontal_brace(false, &options);
+        assert_eq!(underbrace.placement, StretchyPlacement::Below);
+        assert!((underbrace.gap - 2.5 * rule).abs() < 1e-9);
+    }
+
+    #[test]
+    fn overline_geometry_matches_katex_vlist_rule_units() {
+        let options = LayoutOptions::default();
+        let rule = options.metrics().default_rule_thickness;
+        let geometry = RuleGeometry::overline(&options);
+
+        assert_eq!(geometry.thickness, rule);
+        assert!((geometry.line_center_offset - 3.5 * rule).abs() < 1e-9);
+        assert!((geometry.total_extent - 5.0 * rule).abs() < 1e-9);
     }
 }
 

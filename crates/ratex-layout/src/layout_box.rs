@@ -33,6 +33,12 @@ pub enum BoxContent {
         char_code: u32,
     },
 
+    /// A shaped text run. Glyph positions are relative to the run origin.
+    ///
+    /// This is an internal layout primitive; `to_display_list` continues to
+    /// flatten it to protocol-compatible `GlyphPath` items.
+    GlyphRun { glyphs: Vec<RunGlyph> },
+
     /// Filled rectangle from `\rule[<raise>]{width}{height}`.
     /// `thickness` is the ink height; `raise` is the distance (in em) from the baseline
     /// to the bottom edge of the rectangle, positive toward the top of the line.
@@ -183,14 +189,14 @@ pub enum BoxContent {
     },
 
     /// \overline{body}: body with a horizontal rule drawn above it.
-    /// The rule sits `2 * rule_thickness` above the body's top (clearance), and is `rule_thickness` thick.
     Overline {
         body: Box<LayoutBox>,
         rule_thickness: f64,
+        /// Distance from the body's top to the rule center.
+        offset: f64,
     },
 
     /// \underline{body}: body with a horizontal rule drawn below it.
-    /// The rule sits `2 * rule_thickness` below the body's bottom (clearance), and is `rule_thickness` thick.
     Underline {
         body: Box<LayoutBox>,
         rule_thickness: f64,
@@ -212,6 +218,13 @@ pub struct PlacedBox {
     pub box_: LayoutBox,
     pub x: f64,
     pub baseline_y: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct RunGlyph {
+    pub x: f64,
+    pub font_id: ratex_font::FontId,
+    pub char_code: u32,
 }
 
 #[derive(Debug, Clone)]

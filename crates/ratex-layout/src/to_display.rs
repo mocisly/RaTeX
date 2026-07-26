@@ -205,6 +205,22 @@ fn emit_box(
                 });
             }
 
+            BoxContent::GlyphRun { glyphs } => {
+                for glyph in glyphs {
+                    let font_str = font_str_cache
+                        .entry(glyph.font_id)
+                        .or_insert_with(|| glyph.font_id.as_str().to_string());
+                    items.push(DisplayItem::GlyphPath {
+                        x: x + glyph.x * scale,
+                        y,
+                        scale,
+                        font: font_str.clone(),
+                        char_code: glyph.char_code,
+                        color: lbox.color,
+                    });
+                }
+            }
+
             BoxContent::Rule { thickness, raise } => {
                 // Baseline at `y` (downward screen coords); bottom of ink is `raise` em above baseline.
                 let cy = y - (raise + thickness / 2.0) * scale;
@@ -790,9 +806,9 @@ fn emit_box(
             BoxContent::Overline {
                 body,
                 rule_thickness,
+                offset,
             } => {
-                // Rule center is at 2.5 * rule_thickness above the body's top
-                let rule_center_y = y - (body.height + 2.5 * rule_thickness) * scale;
+                let rule_center_y = y - (body.height + offset) * scale;
                 pending.push(EmitAction::Item(DisplayItem::Line {
                     x,
                     y: rule_center_y,

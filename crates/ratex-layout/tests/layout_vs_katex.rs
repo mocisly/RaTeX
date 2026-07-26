@@ -653,8 +653,50 @@ fn text_hello() {
 }
 
 #[test]
+fn continuous_text_and_textrm_use_glyph_runs() {
+    use ratex_layout::layout_box::{BoxContent, LayoutBox};
+
+    fn longest_run(lbox: &LayoutBox) -> usize {
+        match &lbox.content {
+            BoxContent::GlyphRun { glyphs } => glyphs.len(),
+            BoxContent::HBox(children) => children.iter().map(longest_run).max().unwrap_or(0),
+            BoxContent::Scaled { body, .. } | BoxContent::RaiseBox { body, .. } => {
+                longest_run(body)
+            }
+            _ => 0,
+        }
+    }
+
+    for input in [r"\text{hello}", r"\textrm{hello}"] {
+        let lbox = layout(&parse(input).unwrap(), &LayoutOptions::default());
+        assert_eq!(
+            longest_run(&lbox),
+            5,
+            "{input} should be laid out as one five-glyph run"
+        );
+    }
+}
+
+#[test]
 fn mathrm_sin() {
     check("\\mathrm{sin}", 0.6679, 0.0);
+}
+
+#[test]
+fn href_does_not_add_fixed_tracking_to_text_run() {
+    let options = LayoutOptions::default();
+    let linked = layout(
+        &parse(r"\href{https://example.com}{\texttt{AaBb123}}").unwrap(),
+        &options,
+    );
+    let plain = layout(&parse(r"\texttt{AaBb123}").unwrap(), &options);
+
+    assert!(
+        (linked.width - plain.width).abs() < TOLERANCE,
+        "href changed text width: linked={:.5}, plain={:.5}",
+        linked.width,
+        plain.width
+    );
 }
 
 /// `\mathrm{mm^{2}}` (e.g. mhchem `\pu{123 mm2}`): base of superscript must stay roman, not math italic.
@@ -666,10 +708,16 @@ fn mathrm_mm_squared_both_m_upright() {
     fn collect_m_fonts(lb: &LayoutBox) -> Vec<FontId> {
         let mut v = Vec::new();
         match &lb.content {
-            BoxContent::Glyph { font_id, char_code } => {
-                if *char_code == 'm' as u32 {
-                    v.push(*font_id);
-                }
+            BoxContent::Glyph { font_id, char_code } if *char_code == 'm' as u32 => {
+                v.push(*font_id);
+            }
+            BoxContent::GlyphRun { glyphs } => {
+                v.extend(
+                    glyphs
+                        .iter()
+                        .filter(|glyph| glyph.char_code == 'm' as u32)
+                        .map(|glyph| glyph.font_id),
+                );
             }
             BoxContent::HBox(children) => {
                 for c in children {
