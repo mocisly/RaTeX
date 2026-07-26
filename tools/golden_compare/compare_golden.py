@@ -1057,7 +1057,7 @@ def write_csv_report(path: Path, records: Iterable[dict[str, Any]]) -> None:
         "reason",
     ]
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         for record in records:
             row = {key: record.get(key) for key in fields}

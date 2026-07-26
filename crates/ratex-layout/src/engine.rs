@@ -5966,21 +5966,6 @@ fn layout_cd(body: &[Vec<ParseNode>], options: &LayoutOptions) -> LayoutBox {
     // not “stretch every row to column max”.
     let col_target_w: Vec<f64> = col_widths.clone();
 
-    #[cfg(debug_assertions)]
-    {
-        eprintln!("[CD] pass1 col_widths={col_widths:?} row_heights={row_heights:?} row_depths={row_depths:?}");
-        for (r, row) in cell_boxes.iter().enumerate() {
-            for (c, b) in row.iter().enumerate() {
-                if b.width > 0.0 {
-                    eprintln!(
-                        "[CD]   cell[{r}][{c}] w={:.4} h={:.4} d={:.4}",
-                        b.width, b.height, b.depth
-                    );
-                }
-            }
-        }
-    }
-
     // ── Pass 2: re-layout arrow cells with target dimensions ───────────────
     for (r, row) in body.iter().enumerate() {
         let is_arrow_row = r % 2 == 1;
@@ -6028,11 +6013,6 @@ fn layout_cd(body: &[Vec<ParseNode>], options: &LayoutOptions) -> LayoutBox {
                 cell_boxes[r][c] = new_box;
             }
         }
-    }
-
-    #[cfg(debug_assertions)]
-    {
-        eprintln!("[CD] pass2 col_widths={col_widths:?} row_heights={row_heights:?} row_depths={row_depths:?}");
     }
 
     // KaTeX `environments/cd.js` sets `addJot: true` for CD; `array.js` adds `\jot` (3pt) to each

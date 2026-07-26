@@ -177,6 +177,7 @@ class GoldenComparatorTests(unittest.TestCase):
             golden.write_csv_report(csv_path, report["cases"])
             loaded = json.loads(json_path.read_text(encoding="utf-8"))
             self.assertEqual(loaded["cases"][0]["formula"], "x")
+            self.assertNotIn(b"\r\n", csv_path.read_bytes())
             with csv_path.open(encoding="utf-8") as handle:
                 rows = list(csv.DictReader(handle))
             self.assertEqual(rows[0]["status"], "scored")
