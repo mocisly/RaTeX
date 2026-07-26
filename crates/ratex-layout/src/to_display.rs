@@ -34,8 +34,10 @@ pub fn to_display_list(root: &LayoutBox) -> DisplayList {
     // Compute visual bounding box from actual display items.
     // This handles cases like \smash (zero height/depth) and \mathllap (zero width)
     // where content extends beyond the nominal box dimensions.
-    // Horizontal: near-zero nominal width gets full expansion; otherwise we still shift when
-    // `min_x < 0` so \mathclap under large operators does not paint off the left edge.
+    // Horizontal: expand only genuinely zero-width roots. Nested zero-width
+    // constructs such as `\mathclap` intentionally keep their overflow outside
+    // the parent advance; the fixed output viewport clips that overflow exactly
+    // like KaTeX's measured element box.
     let (min_x, max_x, min_y, max_y) = compute_visual_bounds(&items);
 
     let mut width = root.width;
@@ -59,10 +61,9 @@ pub fn to_display_list(root: &LayoutBox) -> DisplayList {
         }
     }
 
-    // Expand horizontal dimensions when nominal width is near-zero (e.g. pure \mathllap), or when
-    // ink extends left of x=0. The latter happens for `\sum_{\mathclap{…}}`: the subscript box has
-    // zero advance but negative kerns center the ink, so the first glyph can sit at negative x.
-    // Rasterizers (PNG) clip there; shift right so all items stay in [0, width].
+    // Expand horizontal dimensions when the root itself has near-zero nominal
+    // width (e.g. a standalone \mathllap). For a non-zero parent, preserve
+    // negative child coordinates so nested lap ink is clipped by the viewport.
     if root.width < 0.01 {
         if min_x < -0.001 {
             let extra = -min_x;
@@ -74,12 +75,6 @@ pub fn to_display_list(root: &LayoutBox) -> DisplayList {
         let shifted_max_x = if min_x < -0.001 { max_x - min_x } else { max_x };
         if shifted_max_x > width + 0.001 {
             width = shifted_max_x;
-        }
-    } else if min_x < -0.001 {
-        let extra = -min_x;
-        width = (root.width + extra).max(max_x + extra);
-        for item in &mut items {
-            shift_item_x(item, extra);
         }
     }
 

@@ -1,10 +1,10 @@
 {
   "manifest_version": 1,
   "kind": "katex-reference",
-  "generated_at": "2026-07-26T03:05:17.508Z",
+  "generated_at": "2026-07-26T15:12:50.377Z",
   "test_cases": "tests/golden/test_cases.txt",
-  "test_cases_sha256": "562afe96aac9a0a935b6b161ced8564360d040f8ac44b1943d3bdb982c45ce11",
-  "case_count": 1051,
+  "test_cases_sha256": "2bfd67bb3e05bab0edd969f4641c2f32266a0d78216be153e5e4da8f84bf2352",
+  "case_count": 1073,
   "katex_version": "0.16.45",
   "puppeteer_version": "24.38.0",
   "chromium_revision": "146.0.7680.31",
@@ -7430,6 +7430,160 @@
       "status": "rendered",
       "png": "1051.png",
       "sha256": "ce480f6ac16b7c9d40e9fa1c98b2998cc365a31982ad0501bfd3792146a07f27"
+    },
+    {
+      "index": 1052,
+      "formula": "\\dots,\\quad \\dots+\\quad \\dots\\int\\quad \\dots)",
+      "status": "rendered",
+      "png": "1052.png",
+      "sha256": "8e28fcacd4d75819fd34e533ab83fd9a5de62445c7a48f2ca4bfc2644e1424ed"
+    },
+    {
+      "index": 1053,
+      "formula": "\\cdots,\\quad \\dotsc,\\quad \\dotso;",
+      "status": "rendered",
+      "png": "1053.png",
+      "sha256": "75b6dbe859472a0ea030646f8c83725e11c4cd555c0984b89ee0940fca227769"
+    },
+    {
+      "index": 1054,
+      "formula": "\\dddot{x}\\quad\\ddddot{x}",
+      "status": "rendered",
+      "png": "1054.png",
+      "sha256": "8d965f2f460f97eb4671fb5fecc7fe0097e3bdeb1ea3965799f8d2a5aad17bf7"
+    },
+    {
+      "index": 1055,
+      "formula": "\\prod_{k=1}^{n} k",
+      "status": "rendered",
+      "png": "1055.png",
+      "sha256": "59e6043f2144fb650b8c4a5b5280f227f29aa93f0b569643fb9a05b32e54919e"
+    },
+    {
+      "index": 1056,
+      "formula": "\\coprod_i S_i",
+      "status": "rendered",
+      "png": "1056.png",
+      "sha256": "af8e5c7fac6695b243603b807aea83321fdf55146ab99ee8d4279608b00e141b"
+    },
+    {
+      "index": 1057,
+      "formula": "\\sum_{m=1}^{M} m",
+      "status": "rendered",
+      "png": "1057.png",
+      "sha256": "9df677f092a277e3a509d10d6d753cd80a599622d1e38901ef6866ba5e639bc2"
+    },
+    {
+      "index": 1058,
+      "formula": "\\bigwedge_{i=1}^n \\varphi_i",
+      "status": "rendered",
+      "png": "1058.png",
+      "sha256": "1210723bd553ff53a803827cbf24d2cc34d866f1aa19c173c1a2c625aae08885"
+    },
+    {
+      "index": 1059,
+      "formula": "\\bigvee_{j} \\psi_j",
+      "status": "rendered",
+      "png": "1059.png",
+      "sha256": "b36f0c9cd8ffb8089ad5d06fdf70319ad65f551fea40440145fd5c24259d9ea9"
+    },
+    {
+      "index": 1060,
+      "formula": "\\bigcap_{n} U_n",
+      "status": "rendered",
+      "png": "1060.png",
+      "sha256": "63ce3c8dad7739f45fd44bea4b728366cee897c79c6c46447da36ef63716d2cd"
+    },
+    {
+      "index": 1061,
+      "formula": "\\bigcup_{\\alpha} V_{\\alpha}",
+      "status": "rendered",
+      "png": "1061.png",
+      "sha256": "ce5fab22c3f8e8a672582e368c4a4c889c8eec2b5e6217a1d70248734461b873"
+    },
+    {
+      "index": 1062,
+      "formula": "\\bigodot_{i=1}^r G_i",
+      "status": "rendered",
+      "png": "1062.png",
+      "sha256": "a5c5de3070c1ee5aa07e2acef4ed8ea44a95f1e0584e4406ad3f2cb3644f149f"
+    },
+    {
+      "index": 1063,
+      "formula": "\\bigoplus_{j} H_j",
+      "status": "rendered",
+      "png": "1063.png",
+      "sha256": "e504ae2d6b636b5ee071b7d61aa8c886dd05bea53f472cd7a2455803a671b912"
+    },
+    {
+      "index": 1064,
+      "formula": "\\bigotimes_{k} L_k",
+      "status": "rendered",
+      "png": "1064.png",
+      "sha256": "df25148440c1ed018716a78c7187082308d3483ee2ec42cdb829e35bbdd4ff58"
+    },
+    {
+      "index": 1065,
+      "formula": "\\biguplus_{m} P_m",
+      "status": "rendered",
+      "png": "1065.png",
+      "sha256": "51aab4b8e6e89ce2cd00549d3e0d3b38f71247a35fe45fe012e52019d55955f3"
+    },
+    {
+      "index": 1066,
+      "formula": "\\bigsqcup_{n} Q_n",
+      "status": "rendered",
+      "png": "1066.png",
+      "sha256": "46dc1feaeb4437445ba596be9daed5f09dd166de3a15781f6bf25131d3fefa81"
+    },
+    {
+      "index": 1067,
+      "formula": "\\displaystyle\\sum_{n=1}^{\\infty}",
+      "status": "rendered",
+      "png": "1067.png",
+      "sha256": "0b4f26d3bf9989eee42965341c65205097bd11d1aff1705fb2d9a77c6f5eda2b"
+    },
+    {
+      "index": 1068,
+      "formula": "\\textstyle\\sum_{n=1}^{\\infty}",
+      "status": "rendered",
+      "png": "1068.png",
+      "sha256": "a5d70e5d21ab47104c37f91de551a96c522a49661a36b706a5ff1052a485bdb8"
+    },
+    {
+      "index": 1069,
+      "formula": "\\scriptstyle\\sum_{n=1}^{\\infty}",
+      "status": "rendered",
+      "png": "1069.png",
+      "sha256": "68ec91a6778ae0a4f163b47526b75763a00043b265f16104fdaf4dbebd436210"
+    },
+    {
+      "index": 1070,
+      "formula": "\\scriptscriptstyle\\sum_{n=1}^{\\infty}",
+      "status": "rendered",
+      "png": "1070.png",
+      "sha256": "f24ccdb95e41265e090cda7a3428d78b56857ef11f71973ef91e13bb0fe8032d"
+    },
+    {
+      "index": 1071,
+      "formula": "\\displaystyle\\sum\\nolimits_{n=1}^{\\infty} x_n",
+      "status": "rendered",
+      "png": "1071.png",
+      "sha256": "eb5aa09ab30f73176d306b4a3bd564d32459df1edf2162ec61a4c3ae622897d5"
+    },
+    {
+      "index": 1072,
+      "formula": "\\displaystyle\\lim_{x\\to0} f(x)",
+      "status": "rendered",
+      "png": "1072.png",
+      "sha256": "41ef0cbbc7f9525230f2db9168fab4f7135016d8ac104b8d130eb72e7f5178d1"
+    },
+    {
+      "index": 1073,
+      "formula": "\\textstyle\\lim\\limits_{x\\to0} f(x)",
+      "status": "rendered",
+      "png": "1073.png",
+      "sha256": "41ef0cbbc7f9525230f2db9168fab4f7135016d8ac104b8d130eb72e7f5178d1"
     }
   ]
 }

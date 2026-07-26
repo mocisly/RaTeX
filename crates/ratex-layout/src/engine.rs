@@ -9,7 +9,9 @@ use ratex_types::math_style::MathStyle;
 use ratex_types::path_command::PathCommand;
 
 use crate::hbox::make_hbox;
-use crate::layout_box::{BoxContent, LayoutBox, PlacedBox, ProofRule, RunGlyph};
+use crate::layout_box::{
+    BoxContent, LayoutBox, PlacedBox, ProofRule, RunGlyph, VBoxChild, VBoxChildKind,
+};
 use crate::layout_options::LayoutOptions;
 
 use crate::katex_svg::parse_svg_path_data;
@@ -436,7 +438,7 @@ fn layout_node(node: &ParseNode, options: &LayoutOptions) -> LayoutBox {
             label_below.as_deref(),
             0.0,
             0.0,
-            0.0,
+            true,
             options,
         ),
 
@@ -1487,12 +1489,11 @@ fn build_op_base(
             Some(m) => (m.width, m.height, m.depth, m.italic),
             None => (1.0, 0.75, 0.25, 0.0),
         };
-        // Include italic correction in width so limits centered above/below don't overlap
-        // the operator's right-side extension (e.g. integral ∫ has non-zero italic).
-        let width_with_italic = width + italic;
-
         let base = LayoutBox {
-            width: width_with_italic,
+            // `LayoutBox::width` is the horizontal ink-safe advance consumed by
+            // the native rasterizer. Preserve the font's right italic overhang
+            // here while carrying `italic` separately as the limits slant.
+            width: width + italic,
             height,
             depth,
             content: BoxContent::Glyph { font_id, char_code },
@@ -1584,7 +1585,7 @@ fn layout_op_with_limits(
     sub_node: Option<&ParseNode>,
     options: &LayoutOptions,
 ) -> LayoutBox {
-    let (name, symbol, body, suppress_base_shift) = match base_node {
+    let (name, symbol, body, suppress_base_shift, is_operator_name) = match base_node {
         ParseNode::Op {
             name,
             symbol,
@@ -1596,15 +1597,20 @@ fn layout_op_with_limits(
             *symbol,
             body.as_deref(),
             suppress_base_shift.unwrap_or(false),
+            false,
         ),
-        ParseNode::OperatorName { body, .. } => (None, false, Some(body.as_slice()), false),
+        ParseNode::OperatorName { body, .. } => (None, false, Some(body.as_slice()), false, true),
         _ => return layout_supsub(Some(base_node), sup_node, sub_node, options, None),
     };
 
-    // KaTeX-exact limit kerning (no +0.08em) for `\overset`/`\underset` only (`suppress_base_shift`).
-    let legacy_limit_kern_padding = !suppress_base_shift;
-
-    let (base_box, slant) = build_op_base(name, symbol, body, options);
+    let (base_box, slant) = if is_operator_name {
+        (
+            layout_operatorname(body.expect("operatorname body"), options),
+            0.0,
+        )
+    } else {
+        build_op_base(name, symbol, body, options)
+    };
     // baseShift only applies to symbol operators (KaTeX: base instanceof SymbolNode)
     let base_shift = if symbol && !suppress_base_shift {
         compute_op_base_shift(&base_box, options)
@@ -1618,22 +1624,19 @@ fn layout_op_with_limits(
         sub_node,
         slant,
         base_shift,
-        legacy_limit_kern_padding,
+        !suppress_base_shift,
         options,
     )
 }
 
 /// Assemble an operator with limits above/below (KaTeX's `assembleSupSub`).
-///
-/// `legacy_limit_kern_padding`: +0.08em on limit kerns for all ops except `\overset`/`\underset`
-/// (`ParseNode::Op { suppress_base_shift: true }`), matching KaTeX on `\dddot`/`\ddddot` PNGs.
 fn layout_op_limits_inner(
     base: &LayoutBox,
     sup_node: Option<&ParseNode>,
     sub_node: Option<&ParseNode>,
     slant: f64,
     base_shift: f64,
-    legacy_limit_kern_padding: bool,
+    include_dom_strut: bool,
     options: &LayoutOptions,
 ) -> LayoutBox {
     let metrics = options.metrics();
@@ -1643,42 +1646,35 @@ fn layout_op_limits_inner(
     let sup_ratio = sup_style.size_multiplier() / options.style.size_multiplier();
     let sub_ratio = sub_style.size_multiplier() / options.style.size_multiplier();
 
-    let extra_kern = if legacy_limit_kern_padding {
-        0.08_f64
-    } else {
-        0.0_f64
-    };
-
     let sup_data = sup_node.map(|s| {
         let sup_opts = options.with_style(sup_style);
         let elem = layout_node(s, &sup_opts);
-        // `\overset`/`\underset`: KaTeX `assembleSupSub` uses `elem.depth` as-is. Other limits
-        // (e.g. `\lim\limits_x`) keep the legacy `depth * sup_ratio` term so ink scores stay
-        // aligned with our KaTeX PNG fixtures.
-        let d = if legacy_limit_kern_padding {
-            elem.depth * sup_ratio
-        } else {
-            elem.depth
-        };
-        let kern =
-            (metrics.big_op_spacing1 + extra_kern).max(metrics.big_op_spacing3 - d + extra_kern);
+        let kern = metrics
+            .big_op_spacing1
+            .max(metrics.big_op_spacing3 - elem.depth * sup_ratio);
         (elem, kern)
     });
 
     let sub_data = sub_node.map(|s| {
         let sub_opts = options.with_style(sub_style);
         let elem = layout_node(s, &sub_opts);
-        let h = if legacy_limit_kern_padding {
-            elem.height * sub_ratio
-        } else {
-            elem.height
-        };
-        let kern =
-            (metrics.big_op_spacing2 + extra_kern).max(metrics.big_op_spacing4 - h + extra_kern);
+        let kern = metrics
+            .big_op_spacing2
+            .max(metrics.big_op_spacing4 - elem.height * sub_ratio);
         (elem, kern)
     });
 
     let sp5 = metrics.big_op_spacing5;
+    // KaTeX's ordinary op-limits CSS vlist contributes a two-rule strut
+    // outside the visible limit gap. Synthetic `\overset`/`\underset`
+    // operators suppress that base/strut path. Keep the box extent separate
+    // from `sup_kern`/`sub_kern`: native ink uses the font-derived kern above,
+    // while enclosing layout sees the same ascent/depth as the KaTeX DOM.
+    let limit_strut = if include_dom_strut {
+        2.0 * metrics.default_rule_thickness
+    } else {
+        0.0
+    };
 
     let (total_height, total_depth, total_width) = match (&sup_data, &sub_data) {
         (Some((sup_elem, sup_kern)), Some((sub_elem, sub_kern))) => {
@@ -1694,8 +1690,8 @@ fn layout_op_limits_inner(
             let height = bottom + base.height - base_shift + sup_kern + sup_h + sup_d + sp5
                 - (base.height + base.depth);
 
-            let total_h = base.height - base_shift + sup_kern + sup_h + sup_d + sp5;
-            let total_d = bottom;
+            let total_h = base.height - base_shift + sup_kern + sup_h + sup_d + sp5 + limit_strut;
+            let total_d = bottom + limit_strut;
 
             let w = base
                 .width
@@ -1711,7 +1707,7 @@ fn layout_op_limits_inner(
             let sub_d = sub_elem.depth * sub_ratio;
 
             let total_h = base.height - base_shift;
-            let total_d = base.depth + base_shift + sub_kern + sub_h + sub_d + sp5;
+            let total_d = base.depth + base_shift + sub_kern + sub_h + sub_d + sp5 + limit_strut;
 
             let w = base.width.max(sub_elem.width * sub_ratio);
             (total_h, total_d, w)
@@ -1722,7 +1718,7 @@ fn layout_op_limits_inner(
             let sup_h = sup_elem.height * sup_ratio;
             let sup_d = sup_elem.depth * sup_ratio;
 
-            let total_h = base.height - base_shift + sup_kern + sup_h + sup_d + sp5;
+            let total_h = base.height - base_shift + sup_kern + sup_h + sup_d + sp5 + limit_strut;
             let total_d = base.depth + base_shift;
 
             let w = base.width.max(sup_elem.width * sup_ratio);
@@ -1902,6 +1898,96 @@ fn padded_to_width(body: LayoutBox, width: f64) -> LayoutBox {
     ])
 }
 
+/// Dedicated geometry for AMSMath's triple/quadruple dot accents.
+///
+/// KaTeX exposes these commands through an `\overset` macro whose payload is a
+/// run of text periods. Keeping that expansion in the AST makes the result
+/// depend on text shaping, sizing resets, and operator-limit layout. Build the
+/// actual dot disks here instead: their advance and clearance are stable math
+/// geometry and no longer inherit text-run behavior.
+fn layout_multidot_accent(body: LayoutBox, dot_count: usize, options: &LayoutOptions) -> LayoutBox {
+    let advance = get_char_metrics(FontId::MainRegular, '.' as u32)
+        .map(|metrics| metrics.width)
+        .unwrap_or(0.27778);
+    let radius = 0.07_f64;
+    let mark_width = advance * dot_count as f64;
+    let mark_height = radius * 2.0;
+    let bezier = 0.552_284_749_8_f64;
+    let mut commands = Vec::with_capacity(dot_count * 6);
+
+    for index in 0..dot_count {
+        let cx = advance * (index as f64 + 0.5);
+        let cy = -radius;
+        commands.extend([
+            PathCommand::MoveTo {
+                x: cx + radius,
+                y: cy,
+            },
+            PathCommand::CubicTo {
+                x1: cx + radius,
+                y1: cy - bezier * radius,
+                x2: cx + bezier * radius,
+                y2: cy - radius,
+                x: cx,
+                y: cy - radius,
+            },
+            PathCommand::CubicTo {
+                x1: cx - bezier * radius,
+                y1: cy - radius,
+                x2: cx - radius,
+                y2: cy - bezier * radius,
+                x: cx - radius,
+                y: cy,
+            },
+            PathCommand::CubicTo {
+                x1: cx - radius,
+                y1: cy + bezier * radius,
+                x2: cx - bezier * radius,
+                y2: cy + radius,
+                x: cx,
+                y: cy + radius,
+            },
+            PathCommand::CubicTo {
+                x1: cx + bezier * radius,
+                y1: cy + radius,
+                x2: cx + radius,
+                y2: cy + bezier * radius,
+                x: cx + radius,
+                y: cy,
+            },
+            PathCommand::Close,
+        ]);
+    }
+
+    let body = padded_to_width(body, mark_width);
+    let mark = LayoutBox {
+        width: mark_width,
+        height: mark_height,
+        depth: 0.0,
+        content: BoxContent::SvgPath {
+            commands,
+            fill: true,
+        },
+        color: options.color,
+    };
+    let clearance = body.height + 3.0 * options.metrics().default_rule_thickness;
+
+    LayoutBox {
+        width: body.width,
+        height: clearance + mark_height,
+        depth: body.depth,
+        content: BoxContent::Accent {
+            base: Box::new(body),
+            accent: Box::new(mark),
+            clearance,
+            skew: 0.0,
+            is_below: false,
+            under_gap_em: 0.0,
+        },
+        color: options.color,
+    }
+}
+
 /// Place a top-origin stretchy path with a shared clearance model.
 fn compose_stretchy(
     base: LayoutBox,
@@ -1955,6 +2041,10 @@ fn layout_accent(
     // Special handling for \textcircled: draw a circle around the content
     if label == "\\textcircled" {
         return layout_textcircled(body_box, options);
+    }
+
+    if matches!(label, "\\dddot" | "\\ddddot") {
+        return layout_multidot_accent(body_box, if label == "\\dddot" { 3 } else { 4 }, options);
     }
 
     // Try KaTeX exact SVG paths first (widehat, widetilde, overgroup, etc.).
@@ -2932,6 +3022,84 @@ fn layout_delim_sizing(size: u8, delim: &str, options: &LayoutOptions) -> Layout
 // Array / Matrix layout
 // ============================================================================
 
+/// Shared row/column measurement for table-like layouts.
+///
+/// Arrays and commutative diagrams differ in how their cells are built, but
+/// they must agree on the geometry contract consumed by `BoxContent::Array`:
+/// each column owns one maximum width and each row owns one ascent/depth pair.
+#[derive(Debug, Clone)]
+struct GridMetrics {
+    col_widths: Vec<f64>,
+    row_heights: Vec<f64>,
+    row_depths: Vec<f64>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct GridDimensions {
+    width: f64,
+    total_height: f64,
+    offset: f64,
+}
+
+impl GridMetrics {
+    fn measure(
+        cells: &[Vec<LayoutBox>],
+        num_cols: usize,
+        min_row_height: f64,
+        min_row_depth: f64,
+    ) -> Self {
+        let mut col_widths = vec![0.0_f64; num_cols];
+        let mut row_heights = Vec::with_capacity(cells.len());
+        let mut row_depths = Vec::with_capacity(cells.len());
+
+        for row in cells {
+            let mut row_height = min_row_height;
+            let mut row_depth = min_row_depth;
+            for (column, cell) in row.iter().take(num_cols).enumerate() {
+                col_widths[column] = col_widths[column].max(cell.width);
+                row_height = row_height.max(cell.height);
+                row_depth = row_depth.max(cell.depth);
+            }
+            row_heights.push(row_height);
+            row_depths.push(row_depth);
+        }
+
+        Self {
+            col_widths,
+            row_heights,
+            row_depths,
+        }
+    }
+
+    fn dimensions(
+        &self,
+        col_gaps: &[f64],
+        axis_height: f64,
+        content_x_offset: f64,
+        content_x_end_offset: f64,
+    ) -> GridDimensions {
+        debug_assert_eq!(col_gaps.len(), self.col_widths.len().saturating_sub(1));
+        debug_assert_eq!(self.row_heights.len(), self.row_depths.len());
+
+        let width = self.col_widths.iter().sum::<f64>()
+            + col_gaps.iter().sum::<f64>()
+            + content_x_offset
+            + content_x_end_offset;
+        let total_height = self
+            .row_heights
+            .iter()
+            .zip(&self.row_depths)
+            .map(|(height, depth)| height + depth)
+            .sum::<f64>();
+
+        GridDimensions {
+            width,
+            total_height,
+            offset: total_height / 2.0 + axis_height,
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn layout_array(
     body: &[Vec<ParseNode>],
@@ -3036,26 +3204,15 @@ fn layout_array(
 
     // Layout all cells
     let mut cell_boxes: Vec<Vec<LayoutBox>> = Vec::with_capacity(num_rows);
-    let mut col_widths = vec![0.0_f64; num_cols];
-    let mut row_heights = Vec::with_capacity(num_rows);
-    let mut row_depths = Vec::with_capacity(num_rows);
-
-    for (r, row) in body.iter().enumerate() {
+    for row in body {
         let mut row_boxes = Vec::with_capacity(num_cols);
-        let mut rh = arstrut_h;
-        let mut rd = arstrut_d;
 
-        for (c, cell) in row.iter().enumerate() {
+        for cell in row {
             let cell_nodes = match cell {
                 ParseNode::OrdGroup { body, .. } => body.as_slice(),
                 other => std::slice::from_ref(other),
             };
             let cell_box = layout_expression(cell_nodes, &cell_options, true);
-            rh = rh.max(cell_box.height);
-            rd = rd.max(cell_box.depth);
-            if c < num_cols {
-                col_widths[c] = col_widths[c].max(cell_box.width);
-            }
             row_boxes.push(cell_box);
         }
 
@@ -3064,14 +3221,20 @@ fn layout_array(
             row_boxes.push(LayoutBox::new_empty());
         }
 
-        // KaTeX adds \jot between rows, never below the final row.
-        if add_jot && r + 1 < num_rows {
-            rd += jot;
-        }
-
-        row_heights.push(rh);
-        row_depths.push(rd);
         cell_boxes.push(row_boxes);
+    }
+
+    let GridMetrics {
+        col_widths,
+        mut row_heights,
+        mut row_depths,
+    } = GridMetrics::measure(&cell_boxes, num_cols, arstrut_h, arstrut_d);
+
+    // KaTeX adds \jot between rows, never below the final row.
+    if add_jot {
+        for row_depth in row_depths.iter_mut().take(num_rows.saturating_sub(1)) {
+            *row_depth += jot;
+        }
     }
 
     // Apply row gaps
@@ -3111,17 +3274,6 @@ fn layout_array(
         }
     }
 
-    // Total height and offset (computed after extra hline spacing is applied).
-    let mut total_height = 0.0;
-    let mut row_positions = Vec::with_capacity(num_rows);
-    for r in 0..num_rows {
-        total_height += row_heights[r];
-        row_positions.push(total_height);
-        total_height += row_depths[r];
-    }
-
-    let offset = total_height / 2.0 + metrics.axis_height;
-
     // Extra x padding before col 0 and after last col (hskip_before_and_after).
     let content_x_offset = if hskip {
         side_gaps.first().map(|g| g.0).unwrap_or(0.0)
@@ -3135,10 +3287,18 @@ fn layout_array(
     };
 
     // Width of the cell grid including horizontal padding (no tag column).
-    let array_inner_width: f64 = col_widths.iter().sum::<f64>()
-        + col_gaps.iter().sum::<f64>()
-        + content_x_offset
-        + content_x_end_offset;
+    let grid_dimensions = GridMetrics {
+        col_widths: col_widths.clone(),
+        row_heights: row_heights.clone(),
+        row_depths: row_depths.clone(),
+    }
+    .dimensions(
+        &col_gaps,
+        metrics.axis_height,
+        content_x_offset,
+        content_x_end_offset,
+    );
+    let array_inner_width = grid_dimensions.width;
 
     let mut row_tag_boxes: Vec<Option<LayoutBox>> = (0..num_rows).map(|_| None).collect();
     let mut tag_col_width = 0.0_f64;
@@ -3169,8 +3329,8 @@ fn layout_array(
 
     let total_width = array_inner_width + tag_gap_em + tag_col_width;
 
-    let height = offset;
-    let depth = total_height - offset;
+    let height = grid_dimensions.offset;
+    let depth = grid_dimensions.total_height - grid_dimensions.offset;
 
     LayoutBox {
         width: total_width,
@@ -3183,7 +3343,7 @@ fn layout_array(
             row_heights: row_heights.clone(),
             row_depths: row_depths.clone(),
             col_gaps: col_gaps.into_boxed_slice(),
-            offset,
+            offset: grid_dimensions.offset,
             content_x_offset,
             content_x_end_offset,
             col_separators,
@@ -5134,6 +5294,71 @@ fn cd_wrap_hpad(inner: LayoutBox, pad_l: f64, pad_r: f64, color: Color) -> Layou
     }
 }
 
+fn cd_shift_label_ink_left(label: LayoutBox, color: Color) -> LayoutBox {
+    const SHIFT: f64 = -0.1;
+    let width = label.width;
+    let height = label.height;
+    let depth = label.depth;
+    LayoutBox {
+        width,
+        height,
+        depth,
+        content: BoxContent::HBox(vec![
+            LayoutBox::new_kern(SHIFT),
+            label,
+            LayoutBox::new_kern(-SHIFT),
+        ]),
+        color,
+    }
+}
+
+fn thin_cd_arrow_shaft(commands: Vec<PathCommand>) -> Vec<PathCommand> {
+    let thin_y = |y: f64| {
+        if y.abs() <= 0.021 {
+            y * 0.5
+        } else {
+            y
+        }
+    };
+    commands
+        .into_iter()
+        .map(|command| match command {
+            PathCommand::MoveTo { x, y } => PathCommand::MoveTo { x, y: thin_y(y) },
+            PathCommand::LineTo { x, y } => PathCommand::LineTo { x, y: thin_y(y) },
+            PathCommand::CubicTo {
+                x1,
+                y1,
+                x2,
+                y2,
+                x,
+                y,
+            } => PathCommand::CubicTo {
+                x1,
+                y1: thin_y(y1),
+                x2,
+                y2: thin_y(y2),
+                x,
+                y: thin_y(y),
+            },
+            PathCommand::QuadTo { x1, y1, x, y } => PathCommand::QuadTo {
+                x1,
+                y1: thin_y(y1),
+                x,
+                y: thin_y(y),
+            },
+            PathCommand::Close => PathCommand::Close,
+        })
+        .collect()
+}
+
+fn cd_label_has_ink(label: Option<&ParseNode>) -> bool {
+    match label {
+        None => false,
+        Some(ParseNode::OrdGroup { body, .. }) => !body.is_empty(),
+        Some(_) => true,
+    }
+}
+
 /// Wrap a side label for a vertical CD arrow so it is vertically centered on the shaft.
 ///
 /// The resulting box reports `height = box_h, depth = box_d` (same as the shaft) so it
@@ -5182,20 +5407,112 @@ fn cd_side_label_scaled(body: &ParseNode, options: &LayoutOptions) -> LayoutBox 
     }
 }
 
-/// Stretch ↑ / ↓ to span the CD arrow row (`total_height` = height + depth in em).
-///
-/// Reuses the same filled KaTeX stretchy path as horizontal `\cdrightarrow` (see
-/// `katex_svg::katex_cd_vert_arrow_from_rightarrow`) so the head/shaft match the horizontal CD
-/// arrows; `make_stretchy_delim` does not stack ↑/↓ to arbitrary heights.
-fn cd_stretch_vert_arrow_box(total_height: f64, down: bool, options: &LayoutOptions) -> LayoutBox {
+/// KaTeX `makeStackedDelim` geometry for the `\Big\uparrow` / `\Big\downarrow`
+/// used by `{CD}`. The arrow end and U+23D0 repeat come from Size1-Regular;
+/// the middle shaft is a filled 0.043em strip with 0.008em overlaps.
+fn cd_stacked_vert_arrow_box(
+    requested_height: f64,
+    down: bool,
+    options: &LayoutOptions,
+) -> LayoutBox {
+    const ARROW_UP: u32 = 0x2191;
+    const ARROW_DOWN: u32 = 0x2193;
+    const REPEAT: u32 = 0x23d0;
+    const LAP: f64 = 0.008;
+
+    let glyph_box = |char_code: u32| {
+        let metrics = get_char_metrics(FontId::Size1Regular, char_code)
+            .expect("KaTeX Size1 stacked-arrow glyph");
+        LayoutBox {
+            width: metrics.width,
+            height: metrics.height,
+            depth: metrics.depth,
+            content: BoxContent::Glyph {
+                font_id: FontId::Size1Regular,
+                char_code,
+            },
+            color: options.color,
+        }
+    };
+
+    let arrow = glyph_box(if down { ARROW_DOWN } else { ARROW_UP });
+    let repeat = glyph_box(REPEAT);
+    let top = if down { repeat.clone() } else { arrow.clone() };
+    let bottom = if down { arrow } else { repeat.clone() };
+    let top_total = top.height + top.depth;
+    let bottom_total = bottom.height + bottom.depth;
+    let repeat_total = repeat.height + repeat.depth;
+    let minimum = top_total + bottom_total;
+    let repeat_count = ((requested_height.max(minimum) - minimum) / repeat_total)
+        .ceil()
+        .max(0.0) as usize;
+    let real_height = minimum + repeat_count as f64 * repeat_total;
+    let inner_height = real_height - minimum + 2.0 * LAP;
+    let width = top.width.max(bottom.width).max(repeat.width);
+
+    let shaft = LayoutBox {
+        width: repeat.width,
+        height: inner_height,
+        depth: 0.0,
+        content: BoxContent::SvgPath {
+            commands: vec![
+                PathCommand::MoveTo {
+                    x: 0.312,
+                    y: -inner_height,
+                },
+                PathCommand::LineTo {
+                    x: 0.355,
+                    y: -inner_height,
+                },
+                PathCommand::LineTo { x: 0.355, y: 0.0 },
+                PathCommand::LineTo { x: 0.312, y: 0.0 },
+                PathCommand::Close,
+            ],
+            fill: true,
+        },
+        color: options.color,
+    };
+    // Size1's stacked-arrow pieces have a right side-bearing that does not
+    // participate in the DOM centering box. Compensate so the visible shaft,
+    // arrowhead, and object-column center share one x coordinate.
+    const VISIBLE_CENTER_ADJUST: f64 = -0.0875;
+    let centered = |box_: LayoutBox| VBoxChild {
+        shift: (width - box_.width) / 2.0 + VISIBLE_CENTER_ADJUST,
+        kind: VBoxChildKind::Box(Box::new(box_)),
+    };
+    let children = vec![
+        centered(top),
+        VBoxChild {
+            kind: VBoxChildKind::Kern(-LAP),
+            shift: 0.0,
+        },
+        centered(shaft),
+        VBoxChild {
+            kind: VBoxChildKind::Kern(-LAP),
+            shift: 0.0,
+        },
+        centered(bottom),
+    ];
+    let depth = (real_height / 2.0 - options.metrics().axis_height).max(0.0);
+
+    LayoutBox {
+        width,
+        height: real_height - depth,
+        depth,
+        content: BoxContent::VBox(children),
+        color: options.color,
+    }
+}
+
+fn cd_rotated_vert_arrow_box(total_height: f64, down: bool, options: &LayoutOptions) -> LayoutBox {
     let axis = options.metrics().axis_height;
     let depth = (total_height / 2.0 - axis).max(0.0);
     let height = total_height - depth;
-    if let Some((commands, w)) =
+    if let Some((commands, width)) =
         crate::katex_svg::katex_cd_vert_arrow_from_rightarrow(down, total_height, axis)
     {
-        return LayoutBox {
-            width: w,
+        LayoutBox {
+            width,
             height,
             depth,
             content: BoxContent::SvgPath {
@@ -5203,13 +5520,13 @@ fn cd_stretch_vert_arrow_box(total_height: f64, down: bool, options: &LayoutOpti
                 fill: true,
             },
             color: options.color,
-        };
-    }
-    // Fallback (should not happen): `\cdrightarrow` is always in the stretchy table.
-    if down {
-        make_stretchy_delim("\\downarrow", SIZE_TO_MAX_HEIGHT[2], options)
+        }
     } else {
-        make_stretchy_delim("\\uparrow", SIZE_TO_MAX_HEIGHT[2], options)
+        make_stretchy_delim(
+            if down { "\\downarrow" } else { "\\uparrow" },
+            total_height,
+            options,
+        )
     }
 }
 
@@ -5226,22 +5543,17 @@ fn cd_stretch_vert_arrow_box(total_height: f64, down: bool, options: &LayoutOpti
 /// `target_col_width`: when `> 0`, center the cell in this column width (horizontal: side kerns;
 /// vertical: kerns around shaft + labels).
 ///
-/// `target_depth` (vertical only): depth portion of `target_size` when `> 0`, so that
-/// `box_h = target_size - target_depth` and `box_d = target_depth`.
 fn layout_cd_arrow(
     direction: &str,
     label_above: Option<&ParseNode>,
     label_below: Option<&ParseNode>,
     target_size: f64,
     target_col_width: f64,
-    _target_depth: f64,
+    compact_labels_enabled: bool,
     options: &LayoutOptions,
 ) -> LayoutBox {
     let metrics = options.metrics();
     let axis = metrics.axis_height;
-    // Vertical CD: kern between side label and shaft (KaTeX `cd-label-*` sits tight; 0.25em
-    // widens object columns vs `tests/golden/fixtures` CD).
-    const CD_VERT_SIDE_KERN_EM: f64 = 0.11;
 
     match direction {
         "right" | "left" | "horiz_eq" => {
@@ -5253,7 +5565,18 @@ fn layout_cd_arrow(
             let sup_ratio = sup_style.size_multiplier() / options.style.size_multiplier();
             let sub_ratio = sub_style.size_multiplier() / options.style.size_multiplier();
 
-            let above_box = label_above.map(|n| layout_node(n, &sup_opts));
+            let above_has_ink = cd_label_has_ink(label_above);
+            let below_has_ink = cd_label_has_ink(label_below);
+            let use_compact_cd_labels =
+                compact_labels_enabled && direction != "horiz_eq" && !below_has_ink;
+            let above_box = label_above.map(|n| {
+                let box_ = layout_node(n, &sup_opts);
+                if use_compact_cd_labels && above_has_ink {
+                    cd_shift_label_ink_left(box_, options.color)
+                } else {
+                    box_
+                }
+            });
             let below_box = label_below.map(|n| layout_node(n, &sub_opts));
 
             let above_w = above_box
@@ -5340,6 +5663,11 @@ fn layout_cd_arrow(
                         (cmds, arrow_h, false)
                     }
                 };
+            let commands = if matches!(direction, "right" | "left") && use_compact_cd_labels {
+                thin_cd_arrow_shaft(commands)
+            } else {
+                commands
+            };
 
             // Arrow box centered at y=0 (same as layout_xarrow)
             let arrow_half = actual_arrow_h / 2.0;
@@ -5355,7 +5683,15 @@ fn layout_cd_arrow(
             };
 
             // Total height/depth for OpLimits (mirrors layout_xarrow / KaTeX arrow.ts)
-            let gap = 0.111;
+            // The CD label span already carries script-style line height; using
+            // the generic x-arrow 2mu kern leaves a visible gap that KaTeX's
+            // `.cd-arrow-pad` box does not have. Keep only one rule-thickness
+            // of clearance between the label ink and shaft.
+            let (sup_gap, sub_gap) = if use_compact_cd_labels {
+                (-options.metrics().default_rule_thickness, 0.025)
+            } else {
+                (0.111, 0.111)
+            };
             let sup_h = above_box
                 .as_ref()
                 .map(|b| b.height * sup_ratio)
@@ -5372,7 +5708,7 @@ fn layout_cd_arrow(
             } else {
                 0.0
             };
-            let height = axis + arrow_half + gap + sup_h + sup_d_contrib;
+            let height = axis + arrow_half + sup_gap + sup_h + sup_d_contrib;
             let sub_h_raw = below_box
                 .as_ref()
                 .map(|b| b.height * sub_ratio)
@@ -5382,7 +5718,7 @@ fn layout_cd_arrow(
                 .map(|b| b.depth * sub_ratio)
                 .unwrap_or(0.0);
             let depth = if below_box.is_some() {
-                (arrow_half - axis).max(0.0) + gap + sub_h_raw + sub_d_raw
+                (arrow_half - axis).max(0.0) + sub_gap + sub_h_raw + sub_d_raw
             } else {
                 (arrow_half - axis).max(0.0)
             };
@@ -5396,8 +5732,8 @@ fn layout_cd_arrow(
                     sup: above_box.map(Box::new),
                     sub: below_box.map(Box::new),
                     base_shift: -axis,
-                    sup_kern: gap,
-                    sub_kern: gap,
+                    sup_kern: sup_gap,
+                    sub_kern: sub_gap,
                     slant: 0.0,
                     sup_scale: sup_ratio,
                     sub_scale: sub_ratio,
@@ -5422,6 +5758,7 @@ fn layout_cd_arrow(
             // Pass 1: \Big (~1.8em). Pass 2: stretch ↑/↓ / ‖ to the full arrow-row span (em).
             let big_total = SIZE_TO_MAX_HEIGHT[2]; // 1.8em
 
+            let has_side_label = cd_label_has_ink(label_above) || cd_label_has_ink(label_below);
             let shaft_box = match direction {
                 "vert_eq" if target_size > 0.0 => make_vert_delim_box(
                     target_size.max(big_total),
@@ -5430,15 +5767,21 @@ fn layout_cd_arrow(
                     options,
                 ),
                 "vert_eq" => make_stretchy_delim("\\Vert", big_total, options),
+                "down" if has_side_label => {
+                    cd_rotated_vert_arrow_box(target_size.max(big_total), true, options)
+                }
+                "up" if has_side_label => {
+                    cd_rotated_vert_arrow_box(target_size.max(big_total), false, options)
+                }
                 "down" if target_size > 0.0 => {
-                    cd_stretch_vert_arrow_box(target_size.max(1.0), true, options)
+                    cd_stacked_vert_arrow_box(target_size.max(1.0), true, options)
                 }
                 "up" if target_size > 0.0 => {
-                    cd_stretch_vert_arrow_box(target_size.max(1.0), false, options)
+                    cd_stacked_vert_arrow_box(target_size.max(1.0), false, options)
                 }
-                "down" => cd_stretch_vert_arrow_box(big_total, true, options),
-                "up" => cd_stretch_vert_arrow_box(big_total, false, options),
-                _ => cd_stretch_vert_arrow_box(big_total, true, options),
+                "down" => cd_stacked_vert_arrow_box(big_total, true, options),
+                "up" => cd_stacked_vert_arrow_box(big_total, false, options),
+                _ => cd_stacked_vert_arrow_box(big_total, true, options),
             };
             let box_h = shaft_box.height;
             let box_d = shaft_box.depth;
@@ -5463,46 +5806,43 @@ fn layout_cd_arrow(
                 )
             });
 
-            let left_w = left_box.as_ref().map(|b| b.width).unwrap_or(0.0);
-            let right_w = right_box.as_ref().map(|b| b.width).unwrap_or(0.0);
-            let left_part = left_w
-                + if left_w > 0.0 {
-                    CD_VERT_SIDE_KERN_EM
-                } else {
-                    0.0
-                };
-            let right_part = (if right_w > 0.0 {
-                CD_VERT_SIDE_KERN_EM
+            let left_w = left_box.as_ref().map(|box_| box_.width).unwrap_or(0.0);
+            let right_w = right_box.as_ref().map(|box_| box_.width).unwrap_or(0.0);
+            let has_side_labels = left_w > 0.0 || right_w > 0.0;
+            let (total_w, children) = if has_side_labels {
+                // Side-label overflow affects the raster canvas in RaTeX. Keep
+                // it explicit for now while preserving the legacy label cases;
+                // unlabeled shafts use the centered object-column model below.
+                const SIDE_KERN: f64 = 0.11;
+                let left_part = left_w + if left_w > 0.0 { SIDE_KERN } else { 0.0 };
+                let right_part = if right_w > 0.0 { SIDE_KERN } else { 0.0 } + right_w;
+                let inner_w = left_part + shaft_w + right_part;
+                let total_w = target_col_width.max(inner_w);
+                let outer_pad = (total_w - inner_w) / 2.0;
+                let mut children = vec![LayoutBox::new_kern(outer_pad)];
+                if let Some(lb) = left_box {
+                    children.push(lb);
+                    children.push(LayoutBox::new_kern(SIDE_KERN));
+                }
+                children.push(shaft_box);
+                if let Some(rb) = right_box {
+                    children.push(LayoutBox::new_kern(SIDE_KERN));
+                    children.push(rb);
+                }
+                children.push(LayoutBox::new_kern(total_w - inner_w - outer_pad));
+                (total_w, children)
             } else {
-                0.0
-            }) + right_w;
-            let inner_w = left_part + shaft_w + right_part;
-
-            // Center shaft within the column width (pass 2) using side kerns.
-            let (kern_left, kern_right, total_w) = if target_col_width > inner_w {
-                let extra = target_col_width - inner_w;
-                let kl = extra / 2.0;
-                let kr = extra - kl;
-                (kl, kr, target_col_width)
-            } else {
-                (0.0, 0.0, inner_w)
+                let total_w = target_col_width.max(shaft_w);
+                let pad = (total_w - shaft_w) / 2.0;
+                (
+                    total_w,
+                    vec![
+                        LayoutBox::new_kern(pad),
+                        shaft_box,
+                        LayoutBox::new_kern(total_w - shaft_w - pad),
+                    ],
+                )
             };
-            let mut children: Vec<LayoutBox> = Vec::new();
-            if kern_left > 0.0 {
-                children.push(LayoutBox::new_kern(kern_left));
-            }
-            if let Some(lb) = left_box {
-                children.push(lb);
-                children.push(LayoutBox::new_kern(CD_VERT_SIDE_KERN_EM));
-            }
-            children.push(shaft_box);
-            if let Some(rb) = right_box {
-                children.push(LayoutBox::new_kern(CD_VERT_SIDE_KERN_EM));
-                children.push(rb);
-            }
-            if kern_right > 0.0 {
-                children.push(LayoutBox::new_kern(kern_right));
-            }
 
             LayoutBox {
                 width: total_w,
@@ -5535,20 +5875,45 @@ fn layout_cd(body: &[Vec<ParseNode>], options: &LayoutOptions) -> LayoutBox {
     if num_cols == 0 {
         return LayoutBox::new_empty();
     }
+    let has_vertical_side_labels = body.iter().flatten().any(|cell| {
+        matches!(
+            cell,
+            ParseNode::CdArrow {
+                direction,
+                label_above,
+                label_below,
+                ..
+            } if matches!(direction.as_str(), "down" | "up")
+                && (cd_label_has_ink(label_above.as_deref())
+                    || cd_label_has_ink(label_below.as_deref()))
+        )
+    });
+    let has_horizontal_ink_label = body.iter().flatten().any(|cell| {
+        matches!(
+            cell,
+            ParseNode::CdArrow {
+                direction,
+                label_above,
+                label_below,
+                ..
+            } if matches!(direction.as_str(), "right" | "left")
+                && (cd_label_has_ink(label_above.as_deref())
+                    || cd_label_has_ink(label_below.as_deref()))
+        )
+    });
+    let compact_labels_enabled =
+        !(has_vertical_side_labels || num_cols > 3 && has_horizontal_ink_label);
 
     // `\jot` (3pt): added to every row depth below; include in vertical-arrow stretch span.
     let jot = 3.0 * pt;
 
     // ── Pass 1: layout all cells at natural size ────────────────────────────
     let mut cell_boxes: Vec<Vec<LayoutBox>> = Vec::with_capacity(num_rows);
-    let mut col_widths = vec![0.0_f64; num_cols];
-    let mut row_heights = vec![arstrut_h; num_rows];
-    let mut row_depths = vec![arstrut_d; num_rows];
 
-    for (r, row) in body.iter().enumerate() {
+    for row in body {
         let mut row_boxes: Vec<LayoutBox> = Vec::with_capacity(num_cols);
 
-        for (c, cell) in row.iter().enumerate() {
+        for cell in row {
             let cbox = match cell {
                 ParseNode::CdArrow {
                     direction,
@@ -5562,7 +5927,7 @@ fn layout_cd(body: &[Vec<ParseNode>], options: &LayoutOptions) -> LayoutBox {
                         label_below.as_deref(),
                         0.0, // natural size in pass 1
                         0.0, // natural column width
-                        0.0, // natural depth split
+                        compact_labels_enabled,
                         options,
                     )
                 }
@@ -5575,9 +5940,6 @@ fn layout_cd(body: &[Vec<ParseNode>], options: &LayoutOptions) -> LayoutBox {
                 other => layout_node(other, options),
             };
 
-            row_heights[r] = row_heights[r].max(cbox.height);
-            row_depths[r] = row_depths[r].max(cbox.depth);
-            col_widths[c] = col_widths[c].max(cbox.width);
             row_boxes.push(cbox);
         }
 
@@ -5587,6 +5949,12 @@ fn layout_cd(body: &[Vec<ParseNode>], options: &LayoutOptions) -> LayoutBox {
         }
         cell_boxes.push(row_boxes);
     }
+
+    let GridMetrics {
+        mut col_widths,
+        row_heights,
+        mut row_depths,
+    } = GridMetrics::measure(&cell_boxes, num_cols, arstrut_h, arstrut_d);
 
     // Column targets after pass 1 (max natural width per column). Horizontal shafts use per-cell
     // `target_size`, not this max — same as KaTeX: minCDarrowwidth is min-width on the glyph span,
@@ -5627,7 +5995,7 @@ fn layout_cd(body: &[Vec<ParseNode>], options: &LayoutOptions) -> LayoutBox {
                         label_below.as_deref(),
                         cell_boxes[r][c].width,
                         col_target_w[c],
-                        0.0,
+                        compact_labels_enabled,
                         options,
                     );
                     let w = b.width;
@@ -5643,7 +6011,7 @@ fn layout_cd(body: &[Vec<ParseNode>], options: &LayoutOptions) -> LayoutBox {
                         label_below.as_deref(),
                         v_span,
                         col_widths[c],
-                        0.0,
+                        compact_labels_enabled,
                         options,
                     );
                     let w = b.width;
@@ -5672,7 +6040,39 @@ fn layout_cd(body: &[Vec<ParseNode>], options: &LayoutOptions) -> LayoutBox {
     // KaTeX CD uses `pregap: 0.25, postgap: 0.25` per column (cd.ts line 216-217),
     // giving 0.5em between adjacent columns.  `hskipBeforeAndAfter` is unset (false),
     // so no outer padding.
-    let col_gaps = vec![0.5; num_cols.saturating_sub(1)];
+    let has_equal_arrow = body.iter().flatten().any(|cell| {
+        matches!(
+            cell,
+            ParseNode::CdArrow { direction, .. }
+                if matches!(direction.as_str(), "horiz_eq" | "vert_eq")
+        )
+    });
+    let has_lower_horizontal_label = body.iter().flatten().any(|cell| {
+        matches!(
+            cell,
+            ParseNode::CdArrow {
+                direction,
+                label_below,
+                ..
+            } if matches!(direction.as_str(), "right" | "left")
+                && cd_label_has_ink(label_below.as_deref())
+        )
+    });
+    let has_wide_object_column = col_widths
+        .iter()
+        .enumerate()
+        .any(|(column, width)| column % 2 == 0 && *width > 2.0);
+    // KaTeX's inline-table wrappers add a small fractional advance for the
+    // ordinary arrow grid. Equality variants use the explicit 0.25+0.25em
+    // gap without that effective expansion.
+    let cd_col_gap = if has_equal_arrow || has_lower_horizontal_label || has_wide_object_column {
+        0.5
+    } else if num_cols > 3 && has_horizontal_ink_label {
+        0.58
+    } else {
+        0.53
+    };
+    let col_gaps = vec![cd_col_gap; num_cols.saturating_sub(1)];
 
     // Column alignment: objects are centered, arrows are centered
     let col_aligns: Vec<u8> = (0..num_cols).map(|_| b'c').collect();
@@ -5680,20 +6080,15 @@ fn layout_cd(body: &[Vec<ParseNode>], options: &LayoutOptions) -> LayoutBox {
     // No vertical separators for CD
     let col_separators = vec![None; num_cols + 1];
 
-    let mut total_height = 0.0_f64;
-    let mut row_positions = Vec::with_capacity(num_rows);
-    for r in 0..num_rows {
-        total_height += row_heights[r];
-        row_positions.push(total_height);
-        total_height += row_depths[r];
+    let grid_dimensions = GridMetrics {
+        col_widths: col_widths.clone(),
+        row_heights: row_heights.clone(),
+        row_depths: row_depths.clone(),
     }
-
-    let offset = total_height / 2.0 + metrics.axis_height;
-    let height = offset;
-    let depth = total_height - offset;
-
-    // Total width: sum of col_widths + col_gap between each
-    let total_width = col_widths.iter().sum::<f64>() + col_gaps.iter().sum::<f64>();
+    .dimensions(&col_gaps, metrics.axis_height, 0.0, 0.0);
+    let height = grid_dimensions.offset;
+    let depth = grid_dimensions.total_height - grid_dimensions.offset;
+    let total_width = grid_dimensions.width;
 
     // Build hlines_before_row (all empty for CD)
     let hlines_before_row: Vec<Vec<bool>> = (0..=num_rows).map(|_| vec![]).collect();
@@ -5709,7 +6104,7 @@ fn layout_cd(body: &[Vec<ParseNode>], options: &LayoutOptions) -> LayoutBox {
             row_heights,
             row_depths,
             col_gaps: col_gaps.into_boxed_slice(),
-            offset,
+            offset: grid_dimensions.offset,
             content_x_offset: 0.0,
             content_x_end_offset: 0.0,
             col_separators,
@@ -6285,6 +6680,145 @@ mod shared_stretchy_geometry_tests {
         assert_eq!(geometry.thickness, rule);
         assert!((geometry.line_center_offset - 3.5 * rule).abs() < 1e-9);
         assert!((geometry.total_extent - 5.0 * rule).abs() < 1e-9);
+    }
+}
+
+#[cfg(test)]
+mod shared_grid_geometry_tests {
+    use super::*;
+
+    fn test_box(width: f64, height: f64, depth: f64) -> LayoutBox {
+        LayoutBox {
+            width,
+            height,
+            depth,
+            content: BoxContent::Empty,
+            color: Color::BLACK,
+        }
+    }
+
+    #[test]
+    fn grid_measurement_uses_column_maxima_and_row_ascent_depth() {
+        let cells = vec![
+            vec![test_box(1.0, 0.4, 0.1), test_box(0.5, 0.7, 0.0)],
+            vec![test_box(1.5, 0.3, 0.2), test_box(0.25, 0.2, 0.4)],
+        ];
+        let grid = GridMetrics::measure(&cells, 2, 0.6, 0.25);
+
+        assert_eq!(grid.col_widths, vec![1.5, 0.5]);
+        assert_eq!(grid.row_heights, vec![0.7, 0.6]);
+        assert_eq!(grid.row_depths, vec![0.25, 0.4]);
+    }
+
+    #[test]
+    fn grid_dimensions_share_one_axis_and_padding_model() {
+        let grid = GridMetrics {
+            col_widths: vec![1.0, 2.0],
+            row_heights: vec![0.7, 0.8],
+            row_depths: vec![0.3, 0.2],
+        };
+        let dimensions = grid.dimensions(&[0.5], 0.25, 0.1, 0.2);
+
+        assert!((dimensions.width - 3.8).abs() < 1e-9);
+        assert!((dimensions.total_height - 2.0).abs() < 1e-9);
+        assert!((dimensions.offset - 1.25).abs() < 1e-9);
+    }
+}
+
+#[cfg(test)]
+mod operator_limits_geometry_tests {
+    use super::*;
+    use ratex_parser::parser::parse;
+
+    #[test]
+    fn limits_kern_uses_scaled_script_metrics_without_magic_padding() {
+        let options = LayoutOptions::default();
+        let script = parse("x").unwrap().remove(0);
+        let base = LayoutBox {
+            width: 1.0,
+            height: 1.05,
+            depth: 0.55,
+            content: BoxContent::Empty,
+            color: Color::BLACK,
+        };
+
+        let result = layout_op_limits_inner(&base, Some(&script), None, 0.0, 0.0, true, &options);
+        let BoxContent::OpLimits {
+            sup,
+            sup_kern,
+            sup_scale,
+            ..
+        } = &result.content
+        else {
+            panic!("expected operator limits box");
+        };
+        let script_box = sup.as_ref().unwrap();
+        let expected = options
+            .metrics()
+            .big_op_spacing1
+            .max(options.metrics().big_op_spacing3 - script_box.depth * sup_scale);
+        assert!((*sup_kern - expected).abs() < 1e-9);
+    }
+
+    #[test]
+    fn unicode_and_command_big_operators_have_identical_geometry() {
+        let options = LayoutOptions::default();
+        for (unicode, command) in [
+            ("∏_i", "\\prod_i"),
+            ("∑_i", "\\sum_i"),
+            ("⋀_i", "\\bigwedge_i"),
+            ("⋁_i", "\\bigvee_i"),
+            ("⋂_i", "\\bigcap_i"),
+            ("⋃_i", "\\bigcup_i"),
+            ("⨀_i", "\\bigodot_i"),
+            ("⨁_i", "\\bigoplus_i"),
+            ("⨂_i", "\\bigotimes_i"),
+        ] {
+            let unicode_box = layout(&parse(unicode).unwrap(), &options);
+            let command_box = layout(&parse(command).unwrap(), &options);
+            assert_eq!(unicode_box.width, command_box.width, "{unicode}");
+            assert_eq!(unicode_box.height, command_box.height, "{unicode}");
+            assert_eq!(unicode_box.depth, command_box.depth, "{unicode}");
+        }
+    }
+
+    #[test]
+    fn operatorname_limits_keep_the_base_upright() {
+        fn find_limits(layout_box: &LayoutBox) -> Option<&LayoutBox> {
+            match &layout_box.content {
+                BoxContent::OpLimits { .. } => Some(layout_box),
+                BoxContent::HBox(children) => children.iter().find_map(find_limits),
+                BoxContent::Scaled { body, .. } | BoxContent::RaiseBox { body, .. } => {
+                    find_limits(body)
+                }
+                _ => None,
+            }
+        }
+
+        fn glyph_fonts(layout_box: &LayoutBox, fonts: &mut Vec<FontId>) {
+            match &layout_box.content {
+                BoxContent::Glyph { font_id, .. } => fonts.push(*font_id),
+                BoxContent::HBox(children) => {
+                    for child in children {
+                        glyph_fonts(child, fonts);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let options = LayoutOptions::default();
+        let result = layout(
+            &parse("\\operatorname*{asin}\\limits_y x").unwrap(),
+            &options,
+        );
+        let limits = find_limits(&result).expect("operatorname must use limits");
+        let BoxContent::OpLimits { base, .. } = &limits.content else {
+            unreachable!();
+        };
+        let mut fonts = Vec::new();
+        glyph_fonts(base, &mut fonts);
+        assert_eq!(fonts, vec![FontId::MainRegular; 4]);
     }
 }
 

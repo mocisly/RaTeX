@@ -162,6 +162,74 @@ fn dotsc_space_after(next: &str) -> bool {
     )
 }
 
+fn dotso_space_after(next: &str) -> bool {
+    next == "," || dotsc_space_after(next)
+}
+
+fn contextual_dots_for(next: &str) -> &'static str {
+    if next == "," {
+        "\\dotsc"
+    } else if matches!(
+        next,
+        "\\not"
+            | "+"
+            | "="
+            | "<"
+            | ">"
+            | "-"
+            | "*"
+            | ":"
+            | "\\DOTSB"
+            | "\\coprod"
+            | "\\bigvee"
+            | "\\bigwedge"
+            | "\\biguplus"
+            | "\\bigcap"
+            | "\\bigcup"
+            | "\\prod"
+            | "\\sum"
+            | "\\bigotimes"
+            | "\\bigoplus"
+            | "\\bigodot"
+            | "\\bigsqcup"
+            | "\\And"
+            | "\\longrightarrow"
+            | "\\Longrightarrow"
+            | "\\longleftarrow"
+            | "\\Longleftarrow"
+            | "\\longleftrightarrow"
+            | "\\Longleftrightarrow"
+            | "\\mapsto"
+            | "\\longmapsto"
+            | "\\hookrightarrow"
+            | "\\doteq"
+            | "\\mathbin"
+            | "\\mathrel"
+            | "\\relbar"
+            | "\\Relbar"
+            | "\\xrightarrow"
+            | "\\xleftarrow"
+    ) || next.starts_with("\\not")
+        || ratex_font::get_symbol(next, ratex_font::Mode::Math).is_some_and(|symbol| {
+            matches!(
+                symbol.group,
+                ratex_font::symbols::Group::Bin | ratex_font::symbols::Group::Rel
+            )
+        })
+    {
+        "\\dotsb"
+    } else if matches!(
+        next,
+        "\\DOTSI" | "\\int" | "\\oint" | "\\iint" | "\\iiint" | "\\iiiint" | "\\idotsint"
+    ) {
+        "\\dotsi"
+    } else if next == "\\DOTSX" {
+        "\\dotsx"
+    } else {
+        "\\dotso"
+    }
+}
+
 impl<'a> MacroExpander<'a> {
     pub fn new(input: &'a str, mode: Mode) -> Self {
         Self::new_with_budget(input, mode, DepthBudget::new(MAX_INPUT_DEPTH))
@@ -288,14 +356,12 @@ impl<'a> MacroExpander<'a> {
             // ── colon ──
             ("\\colon", "\\nobreak\\mskip2mu\\mathpunct{}\\mathchoice{\\mkern-3mu}{\\mkern-3mu}{}{}{:}\\mskip6mu\\relax"),
 
-            // ── dots (string-based) ──
-            ("\\dots", "\\cdots"),
+            // ── dots ──
             ("\\cdots", "\\@cdots"),
             ("\\dotsb", "\\cdots"),
             ("\\dotsm", "\\cdots"),
             ("\\dotsi", "\\!\\cdots"),
             ("\\dotsx", "\\ldots\\,"),
-            ("\\dotso", "\\ldots"),  // other
             ("\\DOTSI", "\\relax"),
             ("\\DOTSB", "\\relax"),
             ("\\DOTSX", "\\relax"),
@@ -368,10 +434,6 @@ impl<'a> MacroExpander<'a> {
             ("\u{2984}", "\\rBrace"),
             // Plimsoll.
             ("\u{29B5}", "\\minuso"),
-
-            // ── dddot / ddddot ──
-            ("\\dddot", "{\\overset{\\raisebox{-0.1ex}{\\normalsize ...}}{#1}}"),
-            ("\\ddddot", "{\\overset{\\raisebox{-0.1ex}{\\normalsize ....}}{#1}}"),
 
             // ── vdots ──
             ("\\vdots", "{\\varvdots\\rule{0pt}{15pt}}"),
@@ -635,8 +697,32 @@ impl<'a> MacroExpander<'a> {
             }),
         );
 
-        // KaTeX/amsmath: \dotsc adds a thin space before selected right
-        // delimiters/punctuation, but not before a following comma.
+        // AMSMath's contextual \dots selection. It expands the following token
+        // once before classifying it, matching KaTeX's expandAfterFuture().
+        self.macros.set(
+            "\\dots".to_string(),
+            MacroDefinition::Function(|me: &mut MacroExpander| -> ParseResult<Vec<Token>> {
+                me.expand_once(false)?;
+                let next = me.future().text.clone();
+                Ok(lex_string_to_stack_tokens(contextual_dots_for(&next)))
+            }),
+        );
+
+        // \dotso and \cdots add a thin space before punctuation/right
+        // delimiters. \dotsc intentionally excludes a following comma.
+        self.macros.set(
+            "\\dotso".to_string(),
+            MacroDefinition::Function(|me: &mut MacroExpander| -> ParseResult<Vec<Token>> {
+                let next = me.future().text.clone();
+                let text = if dotso_space_after(&next) {
+                    "\\ldots\\,"
+                } else {
+                    "\\ldots"
+                };
+                Ok(lex_string_to_stack_tokens(text))
+            }),
+        );
+
         self.macros.set(
             "\\dotsc".to_string(),
             MacroDefinition::Function(|me: &mut MacroExpander| -> ParseResult<Vec<Token>> {
@@ -645,6 +731,19 @@ impl<'a> MacroExpander<'a> {
                     "\\ldots\\,"
                 } else {
                     "\\ldots"
+                };
+                Ok(lex_string_to_stack_tokens(text))
+            }),
+        );
+
+        self.macros.set(
+            "\\cdots".to_string(),
+            MacroDefinition::Function(|me: &mut MacroExpander| -> ParseResult<Vec<Token>> {
+                let next = me.future().text.clone();
+                let text = if dotso_space_after(&next) {
+                    "\\@cdots\\,"
+                } else {
+                    "\\@cdots"
                 };
                 Ok(lex_string_to_stack_tokens(text))
             }),

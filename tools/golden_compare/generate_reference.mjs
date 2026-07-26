@@ -91,8 +91,8 @@ async function main() {
     const args = rawArgs.filter(
         (arg, index) =>
             arg !== '--mhchem' &&
-            index !== manifestArg &&
-            index !== manifestArg + 1
+            (manifestArg < 0 ||
+                (index !== manifestArg && index !== manifestArg + 1))
     );
     const testCasesPath =
         args[0] || join(__dirname, '..', '..', 'tests', 'golden', 'test_cases.txt');
