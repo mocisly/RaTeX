@@ -1,7 +1,7 @@
 {
   "manifest_version": 1,
   "kind": "ratex-render",
-  "generated_at": "2026-07-26T03:11:15.193795Z",
+  "generated_at": "2026-07-26T03:22:11.039202Z",
   "test_cases": "tests/golden/test_cases.txt",
   "test_cases_sha256": "562afe96aac9a0a935b6b161ced8564360d040f8ac44b1943d3bdb982c45ce11",
   "dpr": 1.0,
