@@ -38,7 +38,7 @@ jobs:
           node tools/golden_compare/generate_reference.mjs
       - name: Read the trusted baseline from the target commit
         env:
-          BASELINE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+          BASELINE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: |
           git fetch --no-tags --depth=1 origin "$BASELINE_SHA"
           if git show "${BASELINE_SHA}:tests/golden/reports/main.json" \

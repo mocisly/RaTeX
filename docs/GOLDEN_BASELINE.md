@@ -29,6 +29,9 @@ Ubuntu runner family. Every JSON report records:
 Formula order defines the continuous case range `0001..NNNN`. Reference and
 RaTeX generation each write a manifest with one record per formula:
 
+Blank lines and lines whose first non-whitespace character is `#` or `%` are
+comments and do not consume an index. Every corpus reader follows this rule.
+
 - `tests/golden/fixtures/reference-manifest.json`
 - `tests/golden/output/render-manifest.json`
 
@@ -101,8 +104,13 @@ Useful gates:
 
 `--min-mean` gates `coverage_adjusted_mean`. With a baseline report,
 `--max-case-regression` treats an unscored current case as score zero and
-fails when an indexed formula drops by more than the allowed amount. Baseline
-formula and metric-version mismatches are integrity errors.
+fails when a matched formula drops by more than the allowed amount. Formulas
+are matched by exact source text and duplicate occurrence order, so additions,
+removals, and reordering are reported without preventing comparisons for
+formulas present in both suites. Metric-version mismatches remain integrity
+errors, as do attempts to compare different named suites. If two reports claim
+the same suite hash but contain different cases, the report is treated as
+inconsistent.
 
 ## Website source
 

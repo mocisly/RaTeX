@@ -17,10 +17,12 @@ description: >-
 
 ## 1. Add test cases
 
-- **Main suite**: edit `tests/golden/test_cases.txt` at repo root. One LaTeX formula per line; blank lines ignored; lines starting with `#` are comments.
+- **Main suite**: edit `tests/golden/test_cases.txt` at repo root. One LaTeX formula per line; blank lines ignored; lines starting with `#` or `%` are comments.
 - **mhchem (`\ce`, `\pu`, …)**: edit `tests/golden/test_case_ce.txt` with the same rules.
 
-**Line order** defines case indices: `0001.png` is the first line, `0002.png` the second, etc. (same ordering as in `generate_reference.mjs` and `compare_golden.py`).
+**Formula order** defines case indices: `0001.png` is the first non-comment
+formula, `0002.png` the second, etc. (same ordering as in
+`generate_reference.mjs` and `compare_golden.py`).
 
 ## 2. Generate RaTeX output and KaTeX fixtures
 
@@ -86,8 +88,12 @@ Run from **repo root** so default paths resolve. All paths may be absolute or re
 | `--fail-on-missing` | Fail on unapproved missing/error cases or integrity errors. |
 | `--min-coverage FLOAT` | Require eligible coverage from 0 to 1. |
 | `--min-mean FLOAT` | Require the coverage-adjusted mean; unscored cases count as zero. |
-| `--baseline-report FILE` | Compare indexed formulas with a previous JSON report. |
+| `--baseline-report FILE` | Compare matching formula occurrences with a previous JSON report. |
 | `--max-case-regression FLOAT` | With `--baseline-report`, fail any larger per-case drop. |
+
+Baseline comparison matches formulas by exact source text and duplicate
+occurrence order, so corpus additions, removals, and reordering do not turn
+otherwise comparable formulas into integrity errors.
 
 **Diff behavior:** With `--diff-dir` only, diffs are written for **failing** cases (combined score strictly below `--threshold`). With `--diff-from`, diffs are written for every case in the index range (not only failures).
 

@@ -19,10 +19,12 @@ import re
 import subprocess
 import sys
 import time
-from collections import Counter
+from collections import Counter, defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
+
+from corpus import read_formulas
 
 try:
     import numpy as np
@@ -65,14 +67,6 @@ def sha256_file(path: Path) -> str:
 
 def sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-def read_formulas(path: Path) -> list[str]:
-    return [
-        line.strip()
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.strip().startswith("#")
-    ]
 
 
 def command_output(args: list[str], cwd: Path | None = None) -> str | None:
@@ -714,26 +708,38 @@ def compare_baseline(
             "baseline metric_version does not match current report: "
             f"{baseline.get('metric_version')!r} != {report.get('metric_version')!r}"
         )
+    if baseline.get("suite") != report.get("suite"):
+        errors.append(
+            "baseline suite does not match current report: "
+            f"{baseline.get('suite')!r} != {report.get('suite')!r}"
+        )
     baseline_suite_hash = baseline.get("source", {}).get("suite_hash")
     current_suite_hash = report.get("source", {}).get("suite_hash")
-    if baseline_suite_hash != current_suite_hash:
-        errors.append(
-            "baseline suite_hash does not match the current formula list: "
-            f"{baseline_suite_hash!r} != {current_suite_hash!r}"
-        )
+    suite_changed = baseline_suite_hash != current_suite_hash
 
-    old_cases = {int(item["index"]): item for item in baseline.get("cases", [])}
+    # Formula identity, rather than the numeric slot, is the stable comparison
+    # key when cases are appended, removed, or reordered.  A queue preserves
+    # duplicate formulas by matching their occurrences in report order.
+    old_cases_by_formula: dict[str, deque[dict[str, Any]]] = defaultdict(deque)
+    for item in baseline.get("cases", []):
+        formula = item.get("formula")
+        if isinstance(formula, str):
+            old_cases_by_formula[formula].append(item)
+
     regressions: list[dict[str, Any]] = []
+    added_cases: list[dict[str, Any]] = []
     compared = 0
     for current in report["cases"]:
-        previous = old_cases.get(current["index"])
-        if previous is None:
-            continue
-        if previous.get("formula") != current["formula"]:
-            errors.append(
-                f"baseline formula mismatch at index {current['index']:04d}"
+        candidates = old_cases_by_formula.get(current["formula"])
+        if not candidates:
+            added_cases.append(
+                {
+                    "index": current["index"],
+                    "formula": current["formula"],
+                }
             )
             continue
+        previous = candidates.popleft()
         old_score = float(previous.get("score") or 0.0)
         new_score = float(current.get("score") or 0.0)
         regression = old_score - new_score
@@ -742,16 +748,37 @@ def compare_baseline(
             regressions.append(
                 {
                     "index": current["index"],
+                    "baseline_index": previous["index"],
                     "formula": current["formula"],
                     "baseline_score": old_score,
                     "current_score": new_score,
                     "regression": regression,
                 }
             )
+    removed_cases = [
+        {
+            "index": previous["index"],
+            "formula": formula,
+        }
+        for formula, candidates in old_cases_by_formula.items()
+        for previous in candidates
+    ]
+    if not suite_changed and (added_cases or removed_cases):
+        errors.append(
+            "baseline cases do not match current cases despite an identical suite_hash"
+        )
+
     comparison = {
         "baseline_report": str(baseline_path),
         "baseline_commit_sha": baseline.get("source", {}).get("commit_sha"),
+        "baseline_suite_hash": baseline_suite_hash,
+        "current_suite_hash": current_suite_hash,
+        "suite_changed": suite_changed,
         "compared_case_count": compared,
+        "added_case_count": len(added_cases),
+        "removed_case_count": len(removed_cases),
+        "added_cases": added_cases,
+        "removed_cases": removed_cases,
         "max_case_regression": max_case_regression,
         "regression_count": len(regressions),
         "worst_regression": max(

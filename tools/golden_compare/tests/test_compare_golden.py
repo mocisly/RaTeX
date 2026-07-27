@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import json
 import sys
@@ -14,6 +15,7 @@ TOOL_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOL_DIR))
 
 import compare_golden as golden  # noqa: E402
+from corpus import formula_lines  # noqa: E402
 
 
 def write_png(path: Path, offset: int = 0) -> None:
@@ -47,6 +49,12 @@ def make_args(root: Path, **overrides) -> argparse.Namespace:
 
 
 class GoldenComparatorTests(unittest.TestCase):
+    def test_corpus_comments_do_not_consume_formula_indices(self) -> None:
+        self.assertEqual(
+            formula_lines("a\n  % TeX comment\n# suite comment\n\n b \n"),
+            ["a", "b"],
+        )
+
     def test_metrics_expose_alignment_and_crop_geometry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -191,6 +199,49 @@ class GoldenComparatorTests(unittest.TestCase):
             )
             self.assertFalse(errors)
             self.assertEqual(comparison["regression_count"], 1)
+
+            wrong_suite = copy.deepcopy(baseline)
+            wrong_suite["suite"] = "mhchem"
+            wrong_suite_path = root / "wrong-suite.json"
+            wrong_suite_path.write_text(json.dumps(wrong_suite), encoding="utf-8")
+            _, errors = golden.compare_baseline(
+                report, wrong_suite_path, max_case_regression=0.05
+            )
+            self.assertIn("baseline suite does not match", errors[0])
+
+            evolved = copy.deepcopy(report)
+            evolved["source"]["suite_hash"] = "evolved-suite"
+            evolved["cases"].insert(
+                0,
+                {
+                    **golden.empty_case_record(2, "new-formula"),
+                    "status": "scored",
+                    "score": 1.0,
+                    "passed": True,
+                },
+            )
+            evolved["cases"][1]["index"] = 3
+            comparison, errors = golden.compare_baseline(
+                evolved, baseline_path, max_case_regression=0.05
+            )
+            self.assertFalse(errors)
+            self.assertTrue(comparison["suite_changed"])
+            self.assertEqual(comparison["compared_case_count"], 1)
+            self.assertEqual(comparison["added_case_count"], 1)
+            self.assertEqual(comparison["removed_case_count"], 0)
+            self.assertEqual(comparison["regression_count"], 1)
+            self.assertEqual(comparison["regressions"][0]["baseline_index"], 1)
+            self.assertEqual(comparison["regressions"][0]["index"], 3)
+
+            reduced = copy.deepcopy(evolved)
+            reduced["cases"] = reduced["cases"][:1]
+            comparison, errors = golden.compare_baseline(
+                reduced, baseline_path, max_case_regression=0.05
+            )
+            self.assertFalse(errors)
+            self.assertEqual(comparison["compared_case_count"], 0)
+            self.assertEqual(comparison["added_case_count"], 1)
+            self.assertEqual(comparison["removed_case_count"], 1)
 
 
 if __name__ == "__main__":

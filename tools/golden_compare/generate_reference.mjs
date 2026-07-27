@@ -133,7 +133,10 @@ async function main() {
 
     const lines = readFileSync(testCasesPath, 'utf8')
         .split('\n')
-        .filter(l => l.trim() && !l.trim().startsWith('#'));
+        .filter(l => {
+            const formula = l.trim();
+            return formula && !formula.startsWith('#') && !formula.startsWith('%');
+        });
 
     console.log(
         `Generating ${lines.length} reference PNGs (KaTeX + mhchem, ${fontPx}px)...`

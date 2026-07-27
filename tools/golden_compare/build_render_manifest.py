@@ -10,6 +10,8 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+from corpus import read_formulas
+
 
 ERROR_LINE = re.compile(r"^ERR\s+(\d+)\s+.*?\s—\s(.*)$")
 
@@ -20,14 +22,6 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def formulas(path: Path) -> list[str]:
-    return [
-        line.strip()
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.strip().startswith("#")
-    ]
 
 
 def classify_error(message: str) -> str:
@@ -53,7 +47,7 @@ def main() -> int:
     error_log = Path(args.error_log).resolve()
     json_out = Path(args.json_out).resolve()
     repo_root = Path(__file__).resolve().parents[2]
-    lines = formulas(test_cases)
+    lines = read_formulas(test_cases)
     errors: dict[int, str] = {}
     if error_log.exists():
         for line in error_log.read_text(encoding="utf-8", errors="replace").splitlines():
