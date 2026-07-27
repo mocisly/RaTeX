@@ -1913,10 +1913,10 @@ fn padded_to_width(body: LayoutBox, width: f64) -> LayoutBox {
 /// actual dot disks here instead: their advance and clearance are stable math
 /// geometry and no longer inherit text-run behavior.
 fn layout_multidot_accent(body: LayoutBox, dot_count: usize, options: &LayoutOptions) -> LayoutBox {
-    // The KaTeX macro wraps its dot payload in \normalsize. Explicit
-    // \scriptstyle and script placement scale this entire box later, so
-    // compensate here to keep only the mark at normal text size.
-    let normal_size_scale = 1.0 / options.size_multiplier();
+    // The KaTeX macro wraps its dot payload in \normalsize. Math style and
+    // explicit \tiny...\Huge sizing both scale this entire box later, so
+    // compensate for both to keep only the mark at normal text size.
+    let normal_size_scale = 1.0 / (options.size_multiplier() * options.explicit_size_multiplier);
     let advance = get_char_metrics(FontId::MainRegular, '.' as u32)
         .map(|metrics| metrics.width)
         .unwrap_or(0.27778)
@@ -3394,9 +3394,14 @@ fn layout_sizing(size: u8, body: &[ParseNode], options: &LayoutOptions) -> Layou
     };
 
     // KaTeX `Options.havingSize`: inner is built in `this.style.text()` (≥ textstyle).
-    let inner_opts = options.with_style(options.style.text());
+    // Keep the requested size as absolute layout state so nested sizing resets
+    // replace, rather than compound with, the surrounding explicit size.
+    let current_multiplier = options.size_multiplier() * options.explicit_size_multiplier;
+    let inner_opts = options
+        .with_style(options.style.text())
+        .with_explicit_size_multiplier(multiplier);
     let inner = layout_expression(body, &inner_opts, true);
-    let ratio = multiplier / options.size_multiplier();
+    let ratio = multiplier / current_multiplier;
     if (ratio - 1.0).abs() < 0.001 {
         inner
     } else {
@@ -6061,39 +6066,7 @@ fn layout_cd(body: &[Vec<ParseNode>], options: &LayoutOptions) -> LayoutBox {
     // KaTeX CD uses `pregap: 0.25, postgap: 0.25` per column (cd.ts line 216-217),
     // giving 0.5em between adjacent columns.  `hskipBeforeAndAfter` is unset (false),
     // so no outer padding.
-    let has_equal_arrow = body.iter().flatten().any(|cell| {
-        matches!(
-            cell,
-            ParseNode::CdArrow { direction, .. }
-                if matches!(direction.as_str(), "horiz_eq" | "vert_eq")
-        )
-    });
-    let has_lower_horizontal_label = body.iter().flatten().any(|cell| {
-        matches!(
-            cell,
-            ParseNode::CdArrow {
-                direction,
-                label_below,
-                ..
-            } if matches!(direction.as_str(), "right" | "left")
-                && cd_label_has_ink(label_below.as_deref())
-        )
-    });
-    let has_wide_object_column = col_widths
-        .iter()
-        .enumerate()
-        .any(|(column, width)| column % 2 == 0 && *width > 2.0);
-    // KaTeX's inline-table wrappers add a small fractional advance for the
-    // ordinary arrow grid. Equality variants use the explicit 0.25+0.25em
-    // gap without that effective expansion.
-    let cd_col_gap = if has_equal_arrow || has_lower_horizontal_label || has_wide_object_column {
-        0.5
-    } else if num_cols > 3 && has_horizontal_ink_label {
-        0.58
-    } else {
-        0.53
-    };
-    let col_gaps = vec![cd_col_gap; num_cols.saturating_sub(1)];
+    let col_gaps = vec![0.5; num_cols.saturating_sub(1)];
 
     // Column alignment: objects are centered, arrows are centered
     let col_aligns: Vec<u8> = (0..num_cols).map(|_| b'c').collect();
@@ -6673,6 +6646,9 @@ mod vertical_delimiter_geometry_tests {
 #[cfg(test)]
 mod shared_stretchy_geometry_tests {
     use super::*;
+    use crate::to_display::to_display_list;
+    use ratex_parser::parser::parse;
+    use ratex_types::display_item::DisplayItem;
 
     fn test_box(width: f64, height: f64, depth: f64) -> LayoutBox {
         LayoutBox {
@@ -6684,14 +6660,20 @@ mod shared_stretchy_geometry_tests {
         }
     }
 
-    fn physical_multidot_dimensions(style: MathStyle) -> (f64, f64, f64) {
-        let options = LayoutOptions::default().with_style(style);
-        let accent = layout_multidot_accent(test_box(0.4, 0.4, 0.1), 3, &options);
+    fn physical_multidot_dimensions(
+        style: MathStyle,
+        explicit_size_multiplier: f64,
+    ) -> (f64, f64, f64) {
+        let options = LayoutOptions::default()
+            .with_style(style)
+            .with_explicit_size_multiplier(explicit_size_multiplier);
+        let scale = options.size_multiplier() * options.explicit_size_multiplier;
+        let accent =
+            layout_multidot_accent(test_box(0.4 / scale, 0.4 / scale, 0.1 / scale), 3, &options);
         let mark = match &accent.content {
             BoxContent::Accent { accent, .. } => accent,
             other => panic!("expected accent box, got {other:?}"),
         };
-        let scale = options.size_multiplier();
         (
             mark.width * scale,
             mark.height * scale,
@@ -6701,10 +6683,126 @@ mod shared_stretchy_geometry_tests {
 
     #[test]
     fn multidot_marks_keep_normal_size_in_script_styles() {
-        let display = physical_multidot_dimensions(MathStyle::Display);
+        let display = physical_multidot_dimensions(MathStyle::Display, 1.0);
 
         for style in [MathStyle::Script, MathStyle::ScriptScript] {
-            let actual = physical_multidot_dimensions(style);
+            let actual = physical_multidot_dimensions(style, 1.0);
+            assert!((actual.0 - display.0).abs() < 1e-9);
+            assert!((actual.1 - display.1).abs() < 1e-9);
+            assert!((actual.2 - display.2).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn multidot_marks_keep_normal_size_under_explicit_sizing() {
+        let normal = physical_multidot_dimensions(MathStyle::Display, 1.0);
+
+        for (style, explicit_size_multiplier) in [
+            (MathStyle::Display, 0.5),
+            (MathStyle::Display, 0.9),
+            (MathStyle::Display, 1.44),
+            (MathStyle::Display, 2.488),
+            (MathStyle::Script, 0.9),
+            (MathStyle::Script, 2.488),
+        ] {
+            let actual = physical_multidot_dimensions(style, explicit_size_multiplier);
+            assert!((actual.0 - normal.0).abs() < 1e-9);
+            assert!((actual.1 - normal.1).abs() < 1e-9);
+            assert!((actual.2 - normal.2).abs() < 1e-9);
+        }
+    }
+
+    fn rendered_multidot_path_dimensions(latex: &str) -> (f64, f64) {
+        let ast = parse(latex).unwrap();
+        let display = to_display_list(&layout(&ast, &LayoutOptions::default()));
+        let paths: Vec<&[PathCommand]> = display
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                DisplayItem::Path { commands, .. } => Some(commands.as_slice()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(paths.len(), 1, "{latex}");
+
+        let mut min_x = f64::INFINITY;
+        let mut max_x = f64::NEG_INFINITY;
+        let mut min_y = f64::INFINITY;
+        let mut max_y = f64::NEG_INFINITY;
+        let mut include = |x: f64, y: f64| {
+            min_x = min_x.min(x);
+            max_x = max_x.max(x);
+            min_y = min_y.min(y);
+            max_y = max_y.max(y);
+        };
+        for command in paths[0] {
+            match command {
+                PathCommand::MoveTo { x, y } | PathCommand::LineTo { x, y } => include(*x, *y),
+                PathCommand::CubicTo {
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    x,
+                    y,
+                } => {
+                    include(*x1, *y1);
+                    include(*x2, *y2);
+                    include(*x, *y);
+                }
+                PathCommand::QuadTo { x1, y1, x, y } => {
+                    include(*x1, *y1);
+                    include(*x, *y);
+                }
+                PathCommand::Close => {}
+            }
+        }
+        (max_x - min_x, max_y - min_y)
+    }
+
+    #[test]
+    fn multidot_explicit_size_commands_reset_the_rendered_mark_to_normal() {
+        let normal_triple = rendered_multidot_path_dimensions(r"\dddot{x}");
+        for latex in [
+            r"\tiny\dddot{x}",
+            r"\Large\dddot{x}",
+            r"\small x_{\dddot{y}}",
+        ] {
+            let actual = rendered_multidot_path_dimensions(latex);
+            assert!((actual.0 - normal_triple.0).abs() < 1e-9, "{latex}");
+            assert!((actual.1 - normal_triple.1).abs() < 1e-9, "{latex}");
+        }
+
+        let normal_quadruple = rendered_multidot_path_dimensions(r"\ddddot{x}");
+        for latex in [
+            r"\small\ddddot{x}",
+            r"\Huge\ddddot{x}",
+            r"\Huge x_{\ddddot{y}}",
+        ] {
+            let actual = rendered_multidot_path_dimensions(latex);
+            assert!((actual.0 - normal_quadruple.0).abs() < 1e-9, "{latex}");
+            assert!((actual.1 - normal_quadruple.1).abs() < 1e-9, "{latex}");
+        }
+    }
+
+    #[test]
+    fn nested_explicit_sizing_replaces_the_outer_multiplier() {
+        let normal = rendered_multidot_path_dimensions(r"\dddot{x}");
+        let actual = rendered_multidot_path_dimensions(r"\small{\Large\dddot{x}}");
+        assert!((actual.0 - normal.0).abs() < 1e-9);
+        assert!((actual.1 - normal.1).abs() < 1e-9);
+    }
+
+    #[test]
+    fn multidot_marks_keep_normal_size_in_combined_style_and_sizing() {
+        let display = physical_multidot_dimensions(MathStyle::Display, 1.0);
+        for (style, multiplier) in [
+            (MathStyle::Script, 0.5),
+            (MathStyle::ScriptScript, 0.9),
+            (MathStyle::Script, 1.44),
+            (MathStyle::ScriptScript, 2.488),
+        ] {
+            let actual = physical_multidot_dimensions(style, multiplier);
             assert!((actual.0 - display.0).abs() < 1e-9);
             assert!((actual.1 - display.1).abs() < 1e-9);
             assert!((actual.2 - display.2).abs() < 1e-9);
@@ -6744,6 +6842,7 @@ mod shared_stretchy_geometry_tests {
 #[cfg(test)]
 mod shared_grid_geometry_tests {
     use super::*;
+    use ratex_parser::parser::parse;
 
     fn test_box(width: f64, height: f64, depth: f64) -> LayoutBox {
         LayoutBox {
@@ -6780,6 +6879,73 @@ mod shared_grid_geometry_tests {
         assert!((dimensions.width - 3.8).abs() < 1e-9);
         assert!((dimensions.total_height - 2.0).abs() < 1e-9);
         assert!((dimensions.offset - 1.25).abs() < 1e-9);
+    }
+
+    fn cd_grid(latex: &str) -> (Vec<f64>, Vec<f64>) {
+        fn find_array(lbox: &LayoutBox) -> Option<(&[f64], &[f64])> {
+            match &lbox.content {
+                BoxContent::Array {
+                    col_widths,
+                    col_gaps,
+                    ..
+                } => Some((col_widths, col_gaps)),
+                BoxContent::HBox(children) => children.iter().find_map(find_array),
+                BoxContent::Scaled { body, .. } | BoxContent::RaiseBox { body, .. } => {
+                    find_array(body)
+                }
+                _ => None,
+            }
+        }
+
+        let ast = parse(latex).unwrap();
+        let lbox = layout(&ast, &LayoutOptions::default());
+        let (widths, gaps) = find_array(&lbox).expect("CD must produce an array layout");
+        (widths.to_vec(), gaps.to_vec())
+    }
+
+    fn assert_half_em_gaps(gaps: &[f64], latex: &str) {
+        assert!(!gaps.is_empty(), "{latex}");
+        assert!(
+            gaps.iter().all(|gap| (*gap - 0.5).abs() < 1e-9),
+            "{latex}: {gaps:?}"
+        );
+    }
+
+    #[test]
+    fn cd_arrow_labels_do_not_change_any_column_gap() {
+        let unlabeled = r"\begin{CD} A @>>> B @>>> C \\ D @>>> E @>>> F \end{CD}";
+        let labeled = r"\begin{CD} A @>f>g>> B @>>> C \\ D @>>> E @>>> F \end{CD}";
+        let (_, unlabeled_gaps) = cd_grid(unlabeled);
+        let (_, labeled_gaps) = cd_grid(labeled);
+
+        assert_eq!(unlabeled_gaps, labeled_gaps);
+        assert_half_em_gaps(&unlabeled_gaps, unlabeled);
+    }
+
+    #[test]
+    fn cd_object_width_crossing_two_em_does_not_reflow_column_gaps() {
+        let narrow = r"\begin{CD} \rule{1.99em}{0.1em} @>>> B \\ C @>>> D \end{CD}";
+        let wide = r"\begin{CD} \rule{2.01em}{0.1em} @>>> B \\ C @>>> D \end{CD}";
+        let (narrow_widths, narrow_gaps) = cd_grid(narrow);
+        let (wide_widths, wide_gaps) = cd_grid(wide);
+
+        assert!(narrow_widths[0] < 2.0, "{narrow_widths:?}");
+        assert!(wide_widths[0] > 2.0, "{wide_widths:?}");
+        assert_eq!(narrow_gaps, wide_gaps);
+        assert_half_em_gaps(&narrow_gaps, narrow);
+    }
+
+    #[test]
+    fn cd_column_gaps_are_always_half_an_em_for_matching_grid_structure() {
+        for latex in [
+            r"\begin{CD} A @>>> B \\ C @>>> D \end{CD}",
+            r"\begin{CD} A @= B \\ C @= D \end{CD}",
+            r"\begin{CD} A @>f>> B \\ C @>g>h>> D \end{CD}",
+            r"\begin{CD} A @>>> B @>>> C \\ D @>>> E @>>> F \end{CD}",
+        ] {
+            let (_, gaps) = cd_grid(latex);
+            assert_half_em_gaps(&gaps, latex);
+        }
     }
 }
 
