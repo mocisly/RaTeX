@@ -11,7 +11,7 @@ pub struct LayoutOptions {
     pub align_relation_spacing: Option<f64>,
     /// When inside \\left...\\right, the stretch height for \\middle delimiters (second pass only).
     pub leftright_delim_height: Option<f64>,
-    /// Retained for source compatibility. Glyph runs no longer apply fixed tracking.
+    /// Extra horizontal kern between glyphs (em), e.g. for custom text tracking.
     pub inter_glyph_kern_em: f64,
 }
 

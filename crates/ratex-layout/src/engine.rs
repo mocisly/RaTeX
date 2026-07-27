@@ -3585,8 +3585,15 @@ fn layout_verb(body: &str, star: bool, options: &LayoutOptions) -> LayoutBox {
     hbox
 }
 
-fn glyph_run_box(children: Vec<LayoutBox>, color: Color) -> LayoutBox {
-    let width = children.iter().map(|child| child.width).sum();
+fn glyph_run_box(children: Vec<LayoutBox>, color: Color, inter_glyph_kern: f64) -> LayoutBox {
+    let inter_glyph_kern = if inter_glyph_kern > 0.0 {
+        inter_glyph_kern
+    } else {
+        0.0
+    };
+    let gap_count = children.len().saturating_sub(1);
+    let width =
+        children.iter().map(|child| child.width).sum::<f64>() + gap_count as f64 * inter_glyph_kern;
     let height = children
         .iter()
         .map(|child| child.height)
@@ -3596,9 +3603,11 @@ fn glyph_run_box(children: Vec<LayoutBox>, color: Color) -> LayoutBox {
         .map(|child| child.depth)
         .fold(0.0_f64, f64::max);
     let mut x = 0.0;
+    let glyph_count = children.len();
     let glyphs = children
         .into_iter()
-        .map(|child| {
+        .enumerate()
+        .map(|(index, child)| {
             let BoxContent::Glyph { font_id, char_code } = child.content else {
                 unreachable!("glyph_run_box only accepts glyph boxes");
             };
@@ -3608,6 +3617,9 @@ fn glyph_run_box(children: Vec<LayoutBox>, color: Color) -> LayoutBox {
                 char_code,
             };
             x += child.width;
+            if index + 1 < glyph_count {
+                x += inter_glyph_kern;
+            }
             glyph
         })
         .collect();
@@ -3624,23 +3636,40 @@ fn glyph_run_box(children: Vec<LayoutBox>, color: Color) -> LayoutBox {
 /// Coalesce adjacent glyphs into internal text runs while retaining structural
 /// boxes (accents, inline math, spacing commands, fallback images) as run
 /// boundaries.
-fn make_text_runs(children: Vec<LayoutBox>, color: Color) -> LayoutBox {
+fn make_text_runs(children: Vec<LayoutBox>, color: Color, inter_glyph_kern: f64) -> LayoutBox {
+    let inter_glyph_kern = if inter_glyph_kern > 0.0 {
+        inter_glyph_kern
+    } else {
+        0.0
+    };
     let mut output = Vec::new();
     let mut pending_glyphs = Vec::new();
+    let mut has_previous_child = false;
 
     let flush = |pending: &mut Vec<LayoutBox>, output: &mut Vec<LayoutBox>| {
         if !pending.is_empty() {
-            output.push(glyph_run_box(std::mem::take(pending), color));
+            output.push(glyph_run_box(
+                std::mem::take(pending),
+                color,
+                inter_glyph_kern,
+            ));
         }
     };
 
     for child in children {
         if matches!(child.content, BoxContent::Glyph { .. }) && child.color == color {
+            if pending_glyphs.is_empty() && has_previous_child && inter_glyph_kern > 0.0 {
+                output.push(LayoutBox::new_kern(inter_glyph_kern));
+            }
             pending_glyphs.push(child);
         } else {
             flush(&mut pending_glyphs, &mut output);
+            if has_previous_child && inter_glyph_kern > 0.0 {
+                output.push(LayoutBox::new_kern(inter_glyph_kern));
+            }
             output.push(child);
         }
+        has_previous_child = true;
     }
     flush(&mut pending_glyphs, &mut output);
     make_hbox(output)
@@ -3662,7 +3691,7 @@ fn layout_text(body: &[ParseNode], options: &LayoutOptions) -> LayoutBox {
             }
         }
     }
-    make_text_runs(children, options.color)
+    make_text_runs(children, options.color, 0.0)
 }
 
 /// Layout \pmb — poor man's bold via CSS-style text shadow.
@@ -4058,7 +4087,7 @@ fn layout_with_font(node: &ParseNode, font_id: FontId, options: &LayoutOptions) 
                 .iter()
                 .map(|node| layout_with_font(node, font_id, options))
                 .collect();
-            make_text_runs(children, options.color)
+            make_text_runs(children, options.color, options.inter_glyph_kern_em)
         }
         ParseNode::SupSub { base, sup, sub, .. } => {
             if let Some(base_node) = base.as_deref() {

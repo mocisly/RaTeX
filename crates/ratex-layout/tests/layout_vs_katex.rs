@@ -678,6 +678,31 @@ fn continuous_text_and_textrm_use_glyph_runs() {
 }
 
 #[test]
+fn inter_glyph_kern_changes_font_run_positions_and_width() {
+    use ratex_layout::layout_box::{BoxContent, LayoutBox};
+
+    fn glyph_positions(lbox: &LayoutBox) -> Option<Vec<f64>> {
+        match &lbox.content {
+            BoxContent::GlyphRun { glyphs } => Some(glyphs.iter().map(|glyph| glyph.x).collect()),
+            BoxContent::HBox(children) => children.iter().find_map(glyph_positions),
+            BoxContent::Scaled { body, .. } | BoxContent::RaiseBox { body, .. } => {
+                glyph_positions(body)
+            }
+            _ => None,
+        }
+    }
+
+    let ast = parse(r"\textrm{ab}").unwrap();
+    let plain = layout(&ast, &LayoutOptions::default());
+    let tracked = layout(&ast, &LayoutOptions::default().with_inter_glyph_kern(0.05));
+    let plain_positions = glyph_positions(&plain).expect("plain glyph run");
+    let tracked_positions = glyph_positions(&tracked).expect("tracked glyph run");
+
+    assert!((tracked.width - plain.width - 0.05).abs() < TOLERANCE);
+    assert!((tracked_positions[1] - plain_positions[1] - 0.05).abs() < TOLERANCE);
+}
+
+#[test]
 fn mathrm_sin() {
     check("\\mathrm{sin}", 0.6679, 0.0);
 }
