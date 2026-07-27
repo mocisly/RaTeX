@@ -85,11 +85,14 @@ Run from **repo root** so default paths resolve. All paths may be absolute or re
 | `--diff-to N` | With `--diff-from`: inclusive upper bound on that same 1-based index. |
 | `--json-out FILE` | Write the versioned authoritative JSON report. |
 | `--csv-out FILE` | Write one flat machine-readable row per formula. |
+| `--baseline-out FILE` | Write the minified version-controlled score baseline. |
 | `--fail-on-missing` | Fail on unapproved missing/error cases or integrity errors. |
 | `--min-coverage FLOAT` | Require eligible coverage from 0 to 1. |
 | `--min-mean FLOAT` | Require the coverage-adjusted mean; unscored cases count as zero. |
 | `--baseline-report FILE` | Compare matching formula occurrences with a previous JSON report. |
+| `--baseline-formulas FILE` | Formula corpus belonging to a compact baseline when its suite differs from the current corpus. |
 | `--max-case-regression FLOAT` | With `--baseline-report`, fail any larger per-case drop. |
+| `--require-manifests` | Require generated reference/render manifests (recommended for CI and baseline updates). |
 
 Baseline comparison matches formulas by exact source text and duplicate
 occurrence order, so corpus additions, removals, and reordering do not turn
@@ -113,9 +116,10 @@ python3 tools/golden_compare/compare_golden.py --ce --threshold 0.35 --diff-dir 
 
 Add `tests/golden/diffs/` (or your chosen dir) to `.gitignore` unless the team commits diff PNGs for review.
 
-For a complete main baseline, prefer `./scripts/update_golden_baseline.sh`.
-It regenerates both image sides and writes `tests/golden/reports/main.json`
-plus `main.csv`. The website support table imports that JSON directly.
+For the compact main baseline, prefer `./scripts/update_golden_baseline.sh`.
+It regenerates both image sides and writes the minified
+`tests/golden/baseline.json`. Generated output, manifests, CSV, and full
+diagnostic JSON are not committed; CI uploads the full report as an artifact.
 
 ## Script arguments: `update_golden_output.sh` and `generate_reference.mjs`
 

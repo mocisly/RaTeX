@@ -63,10 +63,8 @@ RaTeX/
 │       ├── fixtures/              # KaTeX reference PNGs (per test case)
 │       ├── fixtures_ce/           # KaTeX+mhchem reference PNGs (optional; for test_case_ce)
 │       ├── fixtures_prooftree/    # MathJax+bussproofs reference PNGs (optional; for test_cases_prooftree)
-│       ├── output/                # RaTeX-rendered PNGs (from ratex-render)
-│       ├── output_ce/             # RaTeX mhchem renders (from update_golden_output.sh)
-│       ├── output_prooftree/      # RaTeX bussproofs/prooftree PNG renders
-│       ├── output_svg_prooftree/  # RaTeX bussproofs/prooftree SVG renders
+│       ├── output*/               # Generated RaTeX PNG/SVG renders (Git-ignored)
+│       ├── baseline.json          # Minified per-formula score baseline
 │       ├── test_cases.txt         # One LaTeX formula per line
 │       ├── test_case_ce.txt       # mhchem \\ce / \\pu examples (fixtures_ce/ refs); parser uses Rust mhchem
 │       ├── test_cases_prooftree.txt # bussproofs \\begin{prooftree} examples

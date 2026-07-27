@@ -42,7 +42,9 @@ def make_args(root: Path, **overrides) -> argparse.Namespace:
         "output_dpr": 1.0,
         "skip_environment": True,
         "baseline_report": None,
+        "baseline_formulas": None,
         "max_case_regression": None,
+        "require_manifests": False,
     }
     values.update(overrides)
     return argparse.Namespace(**values)
@@ -242,6 +244,61 @@ class GoldenComparatorTests(unittest.TestCase):
             self.assertEqual(comparison["compared_case_count"], 0)
             self.assertEqual(comparison["added_case_count"], 1)
             self.assertEqual(comparison["removed_case_count"], 1)
+
+    def test_compact_baseline_uses_external_formula_list(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "fixtures").mkdir()
+            (root / "output").mkdir()
+            (root / "cases.txt").write_text("x\ny\n", encoding="utf-8")
+            for index in range(1, 3):
+                write_png(root / "fixtures" / f"{index:04d}.png")
+                write_png(root / "output" / f"{index:04d}.png")
+
+            report, errors = golden.build_report(make_args(root))
+            self.assertFalse(errors)
+            _, errors = golden.build_report(
+                make_args(root, require_manifests=True)
+            )
+            self.assertTrue(
+                any("missing generation manifest" in error for error in errors)
+            )
+            baseline_path = root / "baseline.json"
+            golden.write_compact_baseline(baseline_path, report)
+
+            baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                set(baseline),
+                {"v", "metric", "suite", "hash", "scores"},
+            )
+            self.assertNotIn(
+                '"cases"', baseline_path.read_text(encoding="utf-8")
+            )
+
+            evolved = copy.deepcopy(report)
+            evolved["source"]["suite_hash"] = "changed"
+            evolved["cases"].reverse()
+            comparison, errors = golden.compare_baseline(
+                evolved,
+                baseline_path,
+                max_case_regression=0.05,
+                baseline_formulas_path=root / "cases.txt",
+            )
+            self.assertFalse(errors)
+            self.assertEqual(comparison["compared_case_count"], 2)
+
+            baseline["hash"] = "wrong"
+            baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+            _, errors = golden.compare_baseline(
+                report,
+                baseline_path,
+                max_case_regression=0.05,
+                baseline_formulas_path=root / "cases.txt",
+            )
+            self.assertIn(
+                "compact baseline hash does not match its formula list",
+                errors,
+            )
 
 
 if __name__ == "__main__":

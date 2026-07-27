@@ -35,8 +35,7 @@ must not be used to publish a second “official” mean. See
 [`docs/GOLDEN_BASELINE.md`](docs/GOLDEN_BASELINE.md) for report fields,
 integrity rules, exclusions, and baseline updates.
 
-Generate the complete versioned baseline (RaTeX output, KaTeX 0.16.45
-references, JSON, and CSV) with:
+Generate the compact versioned baseline with:
 
 ```bash
 cd tools/golden_compare && npm ci
@@ -44,6 +43,10 @@ cd ../..
 python3 -m pip install -r tools/golden_compare/requirements.txt
 ./scripts/update_golden_baseline.sh
 ```
+
+Only `tests/golden/baseline.json` is committed. Generated RaTeX PNG/SVG output,
+manifests, CSV, and the full diagnostic report remain local or are uploaded as
+CI artifacts.
 
 **KaTeX syntax not supported or not equivalent (command-level):** see [README.md](README.md) and [README.zh-CN.md](README.zh-CN.md) (sections *KaTeX differences (commands & DOM)* / *与 KaTeX 的差异（命令 / DOM）*).
 

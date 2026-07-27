@@ -46,7 +46,7 @@ if (!GOLDEN_REPORT || !Array.isArray(GOLDEN_REPORT.cases)) {
 const REPORT_CASES = GOLDEN_REPORT.cases;
 const FORMULAS = REPORT_CASES.map((record) => record.formula);
 const SCORES_BY_INDEX = new Map(
-  REPORT_CASES.filter((record) => record.status === "scored").map((record) => [record.index, record.score]),
+  REPORT_CASES.filter((record) => typeof record.score === "number").map((record) => [record.index, record.score]),
 );
 
 // ── score → tier ──

@@ -2,7 +2,8 @@
 import type { Locale } from "../../i18n/types";
 import { useTranslations, pageHref } from "../../i18n/utils";
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import goldenReport from "../../../../tests/golden/reports/main.json";
+import goldenBaseline from "../../../../tests/golden/baseline.json";
+import formulaCorpus from "../../../../tests/golden/test_cases.txt?raw";
 
 interface Props {
   lang?: Locale;
@@ -10,16 +11,21 @@ interface Props {
 const { lang = "en" } = Astro.props;
 const t = useTranslations(lang);
 const base = import.meta.env.BASE_URL;
-const reportSummary = goldenReport.summary;
-const reportSource = goldenReport.source;
-const renderedMean = reportSummary.rendered_mean.toFixed(3);
-const coverage = `${(reportSummary.coverage * 100).toFixed(2)}%`;
-const reportCommit = `${reportSource.commit_sha.slice(0, 12)}${reportSource.working_tree_dirty ? "+dirty" : ""}`;
-const supportCases = goldenReport.cases.map(({ index, formula, status, score }) => ({
-  index,
+const formulas = formulaCorpus
+  .split(/\r?\n/)
+  .map((line) => line.trim())
+  .filter((line) => line && !line.startsWith("#") && !line.startsWith("%"));
+if (formulas.length !== goldenBaseline.scores.length) {
+  throw new Error("Golden baseline score count does not match the formula corpus");
+}
+const scored = goldenBaseline.scores.filter((score): score is number => score !== null);
+const renderedMean = (
+  scored.reduce((sum, score) => sum + score, 0) / scored.length
+).toFixed(3);
+const supportCases = formulas.map((formula, index) => ({
+  index: index + 1,
   formula,
-  status,
-  score,
+  score: goldenBaseline.scores[index],
 }));
 
 const filterActive =
@@ -30,7 +36,7 @@ const filterIdle =
 
 <BaseLayout
   title="RaTeX — Formula support table"
-  description={`Main golden suite vs KaTeX 0.16.45: ${goldenReport.metric_version} rendered mean ${renderedMean}, ${coverage} coverage. Formula rows and scores come from the versioned CI report.`}
+  description={`Main golden suite vs KaTeX 0.16.45: ${goldenBaseline.metric} rendered mean ${renderedMean}. Formula rows and scores come from the compact versioned baseline.`}
   active="demo"
   lang={lang}
   copyright={t.footer.copyright}
@@ -196,34 +202,18 @@ const filterIdle =
           </p>
         </div>
 
-        <dl class="mb-8 grid max-w-5xl grid-cols-2 gap-px overflow-hidden rounded-[12px] border border-outline/40 bg-outline/30 text-sm sm:grid-cols-4">
-          <div class="bg-white p-4">
-            <dt class="text-[10px] font-label uppercase tracking-wider text-on-surface-variant">Commit</dt>
-            <dd class="mt-1 font-mono text-xs text-zinc-900" title={reportSource.commit_sha}>{reportCommit}</dd>
-          </div>
+        <dl class="mb-8 grid max-w-3xl grid-cols-1 gap-px overflow-hidden rounded-[12px] border border-outline/40 bg-outline/30 text-sm sm:grid-cols-3">
           <div class="bg-white p-4">
             <dt class="text-[10px] font-label uppercase tracking-wider text-on-surface-variant">Suite hash</dt>
-            <dd class="mt-1 font-mono text-xs text-zinc-900" title={reportSource.suite_hash}>{reportSource.suite_hash.slice(0, 12)}</dd>
+            <dd class="mt-1 font-mono text-xs text-zinc-900" title={goldenBaseline.hash}>{goldenBaseline.hash.slice(0, 12)}</dd>
           </div>
           <div class="bg-white p-4">
             <dt class="text-[10px] font-label uppercase tracking-wider text-on-surface-variant">Metric</dt>
-            <dd class="mt-1 font-mono text-xs text-zinc-900">{goldenReport.metric_version}</dd>
-          </div>
-          <div class="bg-white p-4">
-            <dt class="text-[10px] font-label uppercase tracking-wider text-on-surface-variant">Coverage</dt>
-            <dd class="mt-1 font-mono text-xs text-zinc-900">{coverage}</dd>
+            <dd class="mt-1 font-mono text-xs text-zinc-900">{goldenBaseline.metric}</dd>
           </div>
           <div class="bg-white p-4">
             <dt class="text-[10px] font-label uppercase tracking-wider text-on-surface-variant">Rendered mean</dt>
             <dd class="mt-1 font-mono text-xs text-zinc-900">{renderedMean}</dd>
-          </div>
-          <div class="bg-white p-4">
-            <dt class="text-[10px] font-label uppercase tracking-wider text-on-surface-variant">Coverage-adjusted mean</dt>
-            <dd class="mt-1 font-mono text-xs text-zinc-900">{reportSummary.coverage_adjusted_mean.toFixed(3)}</dd>
-          </div>
-          <div class="col-span-2 bg-white p-4">
-            <dt class="text-[10px] font-label uppercase tracking-wider text-on-surface-variant">Generated</dt>
-            <dd class="mt-1 font-mono text-xs text-zinc-900">{goldenReport.generated_at}</dd>
           </div>
         </dl>
 

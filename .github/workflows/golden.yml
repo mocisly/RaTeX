@@ -41,29 +41,30 @@ jobs:
           BASELINE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: |
           git fetch --no-tags --depth=1 origin "$BASELINE_SHA"
-          if git show "${BASELINE_SHA}:tests/golden/reports/main.json" \
-            > "$RUNNER_TEMP/golden-main.json"; then
+          if git show "${BASELINE_SHA}:tests/golden/baseline.json" \
+            > "$RUNNER_TEMP/golden-baseline.json"; then
+            git show "${BASELINE_SHA}:tests/golden/test_cases.txt" \
+              > "$RUNNER_TEMP/golden-baseline-cases.txt"
             echo "Using baseline from $BASELINE_SHA"
-          elif [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            rm -f "$RUNNER_TEMP/golden-main.json"
-            echo "::notice::The target branch has no golden baseline yet; running absolute gates only."
           else
-            echo "::error::The golden baseline is missing from $BASELINE_SHA."
-            exit 1
+            rm -f "$RUNNER_TEMP/golden-baseline.json"
+            echo "::notice::The target commit has no compact golden baseline; running absolute gates only."
           fi
       - name: Score with the authoritative Python comparator
         run: |
           mkdir -p artifacts/golden
           baseline_args=()
-          if [[ -f "$RUNNER_TEMP/golden-main.json" ]]; then
+          if [[ -f "$RUNNER_TEMP/golden-baseline.json" ]]; then
             baseline_args=(
-              --baseline-report "$RUNNER_TEMP/golden-main.json"
+              --baseline-report "$RUNNER_TEMP/golden-baseline.json"
+              --baseline-formulas "$RUNNER_TEMP/golden-baseline-cases.txt"
               --max-case-regression 0.05
             )
           fi
           python3 tools/golden_compare/compare_golden.py \
             --json-out artifacts/golden/main.json \
-            --csv-out artifacts/golden/main.csv \
+            --baseline-out artifacts/golden/baseline.json \
+            --require-manifests \
             --fail-on-missing \
             --min-coverage 1.0 \
             --min-mean 0.85 \

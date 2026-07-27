@@ -13,6 +13,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import os
 import platform
 import re
@@ -67,6 +68,14 @@ def sha256_file(path: Path) -> str:
 
 def sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def suite_hash_for_formulas(formulas: list[str]) -> str:
+    canonical = "".join(
+        f"{index:04d}\0{formula}\n"
+        for index, formula in enumerate(formulas, start=1)
+    )
+    return sha256_text(canonical)
 
 
 def command_output(args: list[str], cwd: Path | None = None) -> str | None:
@@ -693,35 +702,126 @@ def manifest_failure(
     return fallback, manifest_entry.get("reason") or manifest_entry.get("error")
 
 
+def compact_baseline(report: dict[str, Any]) -> dict[str, Any]:
+    """Return the minimal version-controlled baseline representation."""
+    return {
+        "v": 1,
+        "metric": report["metric_version"],
+        "suite": report["suite"],
+        "hash": report["source"]["suite_hash"],
+        "scores": [
+            round(float(case["score"]), 6)
+            if case["status"] == "scored"
+            else None
+            for case in report["cases"]
+        ],
+    }
+
+
+def write_compact_baseline(path: Path, report: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            compact_baseline(report),
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def compare_baseline(
     report: dict[str, Any],
     baseline_path: Path,
     max_case_regression: float | None,
+    baseline_formulas_path: Path | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     errors: list[str] = []
     try:
         baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         return {}, [f"cannot read baseline report {baseline_path}: {exc}"]
-    if baseline.get("metric_version") != report.get("metric_version"):
+    compact = isinstance(baseline.get("scores"), list)
+    baseline_metric = (
+        baseline.get("metric") if compact else baseline.get("metric_version")
+    )
+    baseline_suite = baseline.get("suite")
+    baseline_suite_hash = (
+        baseline.get("hash") if compact else baseline.get("source", {}).get("suite_hash")
+    )
+
+    if baseline_metric != report.get("metric_version"):
         errors.append(
             "baseline metric_version does not match current report: "
-            f"{baseline.get('metric_version')!r} != {report.get('metric_version')!r}"
+            f"{baseline_metric!r} != {report.get('metric_version')!r}"
         )
-    if baseline.get("suite") != report.get("suite"):
+    if baseline_suite != report.get("suite"):
         errors.append(
             "baseline suite does not match current report: "
-            f"{baseline.get('suite')!r} != {report.get('suite')!r}"
+            f"{baseline_suite!r} != {report.get('suite')!r}"
         )
-    baseline_suite_hash = baseline.get("source", {}).get("suite_hash")
     current_suite_hash = report.get("source", {}).get("suite_hash")
     suite_changed = baseline_suite_hash != current_suite_hash
+
+    if compact:
+        if baseline.get("v") != 1:
+            errors.append(f"unsupported compact baseline version: {baseline.get('v')!r}")
+        if baseline_formulas_path is not None:
+            baseline_formulas = read_formulas(baseline_formulas_path)
+        elif not suite_changed:
+            baseline_formulas = [case["formula"] for case in report["cases"]]
+        else:
+            baseline_formulas = []
+            errors.append(
+                "a compact baseline with a different suite hash requires "
+                "--baseline-formulas"
+            )
+        scores = baseline["scores"]
+        invalid_scores = [
+            index
+            for index, score in enumerate(scores, start=1)
+            if score is not None
+            and (
+                isinstance(score, bool)
+                or not isinstance(score, (int, float))
+                or not math.isfinite(score)
+                or not 0.0 <= score <= 1.0
+            )
+        ]
+        if invalid_scores:
+            errors.append(
+                "compact baseline contains invalid scores at indices: "
+                + ", ".join(f"{index:04d}" for index in invalid_scores[:20])
+            )
+        if len(scores) != len(baseline_formulas):
+            errors.append(
+                "compact baseline score count does not match its formula count: "
+                f"{len(scores)} != {len(baseline_formulas)}"
+            )
+        if baseline_formulas and suite_hash_for_formulas(
+            baseline_formulas
+        ) != baseline_suite_hash:
+            errors.append("compact baseline hash does not match its formula list")
+        baseline_cases = [
+            {
+                "index": index,
+                "formula": formula,
+                "score": score if index not in invalid_scores else None,
+            }
+            for index, (formula, score) in enumerate(
+                zip(baseline_formulas, scores), start=1
+            )
+        ]
+    else:
+        baseline_cases = baseline.get("cases", [])
 
     # Formula identity, rather than the numeric slot, is the stable comparison
     # key when cases are appended, removed, or reordered.  A queue preserves
     # duplicate formulas by matching their occurrences in report order.
     old_cases_by_formula: dict[str, deque[dict[str, Any]]] = defaultdict(deque)
-    for item in baseline.get("cases", []):
+    for item in baseline_cases:
         formula = item.get("formula")
         if isinstance(formula, str):
             old_cases_by_formula[formula].append(item)
@@ -770,7 +870,6 @@ def compare_baseline(
 
     comparison = {
         "baseline_report": str(baseline_path),
-        "baseline_commit_sha": baseline.get("source", {}).get("commit_sha"),
         "baseline_suite_hash": baseline_suite_hash,
         "current_suite_hash": current_suite_hash,
         "suite_changed": suite_changed,
@@ -815,22 +914,24 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]:
     render_manifest, render_manifest_errors = load_index_manifest(
         render_manifest_path
     )
-    reference_manifest_errors.extend(
-        validate_generation_manifest(
-            reference_manifest_path,
-            reference_manifest,
-            formulas,
-            test_cases_sha256,
+    if reference_manifest_path.exists() or args.require_manifests:
+        reference_manifest_errors.extend(
+            validate_generation_manifest(
+                reference_manifest_path,
+                reference_manifest,
+                formulas,
+                test_cases_sha256,
+            )
         )
-    )
-    render_manifest_errors.extend(
-        validate_generation_manifest(
-            render_manifest_path,
-            render_manifest,
-            formulas,
-            test_cases_sha256,
+    if render_manifest_path.exists() or args.require_manifests:
+        render_manifest_errors.extend(
+            validate_generation_manifest(
+                render_manifest_path,
+                render_manifest,
+                formulas,
+                test_cases_sha256,
+            )
         )
-    )
 
     policy_path = Path(args.policy).resolve() if args.policy else None
     policy, policy_errors, policy_sha = load_policy(policy_path, formulas)
@@ -953,11 +1054,7 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]:
     output_manifest_sha, output_entries = directory_manifest_hash(
         output_dir, output_images, render_manifest_path
     )
-    canonical_suite = "".join(
-        f"{index:04d}\0{formula}\n"
-        for index, formula in enumerate(formulas, start=1)
-    )
-    suite_hash = sha256_text(canonical_suite)
+    suite_hash = suite_hash_for_formulas(formulas)
     commit_sha = (
         os.environ.get("GITHUB_SHA")
         or command_output(["git", "rev-parse", "HEAD"], cwd=repo_root)
@@ -1046,6 +1143,11 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]:
             report,
             Path(args.baseline_report).resolve(),
             args.max_case_regression,
+            (
+                Path(args.baseline_formulas).resolve()
+                if args.baseline_formulas
+                else None
+            ),
         )
         report["baseline_comparison"] = comparison
         integrity_errors.extend(baseline_errors)
@@ -1153,6 +1255,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--diff-to", type=int)
     parser.add_argument("--json-out")
     parser.add_argument("--csv-out")
+    parser.add_argument("--baseline-out")
     parser.add_argument("--fail-on-missing", action="store_true")
     parser.add_argument("--min-coverage", type=float)
     parser.add_argument(
@@ -1161,7 +1264,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Minimum coverage-adjusted mean (unscored cases contribute zero)",
     )
     parser.add_argument("--baseline-report")
+    parser.add_argument("--baseline-formulas")
     parser.add_argument("--max-case-regression", type=float)
+    parser.add_argument(
+        "--require-manifests",
+        action="store_true",
+        help="Fail if generated reference or render manifests are missing",
+    )
     parser.add_argument("--reference-dpr", type=float, default=2.0)
     parser.add_argument("--output-dpr", type=float, default=1.0)
     parser.add_argument("--prooftree-tolerant", action="store_true")
@@ -1195,6 +1304,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             parser.error(f"--{name.replace('_', '-')} must be between 0 and 1")
     if args.max_case_regression is not None and not args.baseline_report:
         parser.error("--max-case-regression requires --baseline-report")
+    if args.baseline_formulas is not None and not args.baseline_report:
+        parser.error("--baseline-formulas requires --baseline-report")
     if args.diff_to is not None and args.diff_from is None:
         parser.error("--diff-to requires --diff-from")
     if args.diff_from is not None and not args.diff_dir:
@@ -1209,6 +1320,8 @@ def main(argv: list[str] | None = None) -> int:
         write_json_report(Path(args.json_out), report)
     if args.csv_out:
         write_csv_report(Path(args.csv_out), report["cases"])
+    if args.baseline_out:
+        write_compact_baseline(Path(args.baseline_out), report)
     print_summary(report)
 
     failures: list[str] = []

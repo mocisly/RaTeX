@@ -12,7 +12,7 @@ reviewed baseline change.
 
 `tools/golden_compare/package-lock.json` pins KaTeX and Puppeteer exactly.
 `.github/workflows/golden.yml` additionally fixes Node, Python, Rust, and the
-Ubuntu runner family. Every JSON report records:
+Ubuntu runner family. The full CI artifact report records:
 
 - commit SHA and whether the local worktree was dirty;
 - raw test-case SHA-256 and canonical suite hash;
@@ -24,10 +24,10 @@ Ubuntu runner family. Every JSON report records:
 - reference and output DPR;
 - SHA-256 values for every KaTeX/RaTeX font file used.
 
-## Complete indexed manifests
+## Generated indexed manifests
 
 Formula order defines the continuous case range `0001..NNNN`. Reference and
-RaTeX generation each write a manifest with one record per formula:
+RaTeX generation each write a temporary manifest with one record per formula:
 
 Blank lines and lines whose first non-whitespace character is `#` or `%` are
 comments and do not consume an index. Every corpus reader follows this rule.
@@ -35,8 +35,9 @@ comments and do not consume an index. Every corpus reader follows this rule.
 - `tests/golden/fixtures/reference-manifest.json`
 - `tests/golden/output/render-manifest.json`
 
-A failed render therefore occupies an explicit indexed slot even when it has
-no PNG. The report enforces:
+These manifests and all RaTeX-rendered output are ignored by Git. A failed
+render still occupies an explicit indexed slot even when it has no PNG. The
+report enforces:
 
 ```text
 formula_count == fixture_count == output_count == report_case_count
@@ -84,22 +85,31 @@ Or invoke the comparator directly:
 
 ```bash
 python3 tools/golden_compare/compare_golden.py \
-  --json-out tests/golden/reports/main.json \
-  --csv-out tests/golden/reports/main.csv \
+  --baseline-out tests/golden/baseline.json \
+  --require-manifests \
   --fail-on-missing \
   --min-coverage 1.0
 ```
+
+The committed `baseline.json` is deliberately minified. It stores only the
+metric, suite name/hash, and one rounded score (or `null`) per formula. Formula
+text remains in `test_cases.txt`; it is not duplicated. Full JSON diagnostics
+are uploaded by CI as an artifact, while CSV, generated manifests, PNG output,
+and SVG output are not versioned.
 
 Useful gates:
 
 ```text
 --json-out PATH
 --csv-out PATH
+--baseline-out PATH
 --fail-on-missing
 --min-coverage 0..1
 --min-mean 0..1
 --baseline-report PATH
+--baseline-formulas PATH
 --max-case-regression 0..1
+--require-manifests
 ```
 
 `--min-mean` gates `coverage_adjusted_mean`. With a baseline report,
@@ -114,8 +124,6 @@ inconsistent.
 
 ## Website source
 
-`website/src/pages/demo/support-table.astro` imports
-`tests/golden/reports/main.json`. Formula rows, per-case scores, commit, suite
-hash, metric version, coverage, both means, and generation time all come from
-that single versioned report. Do not add a separate embedded formula list or
-score map to the website.
+`website/src/pages/demo/support-table.astro` combines
+`tests/golden/test_cases.txt` with `tests/golden/baseline.json`. Do not add a
+second embedded formula list or score map.
