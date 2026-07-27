@@ -526,6 +526,34 @@ fn accent_hat_x() {
 }
 
 #[test]
+fn accent_keeps_skew_for_multi_glyph_font_run() {
+    use ratex_layout::layout_box::{BoxContent, LayoutBox};
+
+    fn find_accent_skew(lbox: &LayoutBox) -> Option<f64> {
+        match &lbox.content {
+            BoxContent::Accent { skew, .. } => Some(*skew),
+            BoxContent::HBox(children) => children.iter().find_map(find_accent_skew),
+            BoxContent::Scaled { body, .. } | BoxContent::RaiseBox { body, .. } => {
+                find_accent_skew(body)
+            }
+            _ => None,
+        }
+    }
+
+    let options = LayoutOptions::default();
+    let single = layout(&parse(r"\hat{\mathit{M}}").unwrap(), &options);
+    let run = layout(&parse(r"\hat{\mathit{MM}}").unwrap(), &options);
+    let single_skew = find_accent_skew(&single).expect("single-glyph accent");
+    let run_skew = find_accent_skew(&run).expect("multi-glyph accent");
+
+    assert!(single_skew > 0.0, "test glyph must have a non-zero skew");
+    assert!(
+        (run_skew - single_skew).abs() < f64::EPSILON,
+        "font run lost the final glyph skew: single={single_skew}, run={run_skew}"
+    );
+}
+
+#[test]
 fn accent_bar_a() {
     check("\\bar{a}", 0.78056, 0.0);
 }

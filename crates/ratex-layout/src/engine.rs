@@ -1839,6 +1839,13 @@ fn glyph_skew(lb: &LayoutBox) -> f64 {
                 Some(last) => current = last,
                 None => return 0.0,
             },
+            BoxContent::GlyphRun { glyphs } => {
+                return glyphs
+                    .last()
+                    .and_then(|glyph| get_char_metrics(glyph.font_id, glyph.char_code))
+                    .map(|metrics| metrics.skew)
+                    .unwrap_or(0.0);
+            }
             _ => return 0.0,
         }
     }

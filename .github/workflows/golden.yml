@@ -36,17 +36,38 @@ jobs:
         run: |
           ./scripts/update_golden_output.sh --png-only
           node tools/golden_compare/generate_reference.mjs
+      - name: Read the trusted baseline from the target commit
+        env:
+          BASELINE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASELINE_SHA"
+          if git show "${BASELINE_SHA}:tests/golden/reports/main.json" \
+            > "$RUNNER_TEMP/golden-main.json"; then
+            echo "Using baseline from $BASELINE_SHA"
+          elif [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            rm -f "$RUNNER_TEMP/golden-main.json"
+            echo "::notice::The target branch has no golden baseline yet; running absolute gates only."
+          else
+            echo "::error::The golden baseline is missing from $BASELINE_SHA."
+            exit 1
+          fi
       - name: Score with the authoritative Python comparator
         run: |
           mkdir -p artifacts/golden
+          baseline_args=()
+          if [[ -f "$RUNNER_TEMP/golden-main.json" ]]; then
+            baseline_args=(
+              --baseline-report "$RUNNER_TEMP/golden-main.json"
+              --max-case-regression 0.05
+            )
+          fi
           python3 tools/golden_compare/compare_golden.py \
             --json-out artifacts/golden/main.json \
             --csv-out artifacts/golden/main.csv \
             --fail-on-missing \
             --min-coverage 1.0 \
             --min-mean 0.85 \
-            --baseline-report tests/golden/reports/main.json \
-            --max-case-regression 0.05
+            "${baseline_args[@]}"
       - name: Upload machine-readable golden report
         if: always()
         uses: actions/upload-artifact@v4
