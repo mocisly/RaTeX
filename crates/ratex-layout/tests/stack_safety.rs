@@ -106,6 +106,7 @@ fn run_small_stack_cases() {
         ("frac-33", nested_fraction(33)),
         ("left-right-33", nested(r"\left(", r"\right)", 33)),
         ("superscript-33", nested_superscript(33)),
+        ("dots-33", r"\dots".repeat(33)),
     ];
     for (name, input) in &over_limit_cases {
         eprintln!("stack-safety over-limit case: {name}");
@@ -118,6 +119,7 @@ fn run_small_stack_cases() {
         ("frac-300", nested_fraction(300)),
         ("left-right-300", nested(r"\left(", r"\right)", 300)),
         ("superscript-300", nested_superscript(300)),
+        ("dots-300", r"\dots".repeat(300)),
         ("tag-4200", nested_tag(4_200)),
         ("braket-300", nested_braket(300)),
         ("prooftree-axiom-payload-32", prooftree_axiom_payload(32)),
@@ -172,6 +174,7 @@ fn run_boundary_cases() {
         ("frac", nested_fraction(32)),
         ("left-right", nested(r"\left(", r"\right)", 32)),
         ("superscript", nested_superscript(32)),
+        ("dots", r"\dots".repeat(32)),
     ];
     for (_name, input) in &boundary_cases {
         assert_pipeline_ok(input);

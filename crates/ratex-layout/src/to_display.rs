@@ -34,8 +34,10 @@ pub fn to_display_list(root: &LayoutBox) -> DisplayList {
     // Compute visual bounding box from actual display items.
     // This handles cases like \smash (zero height/depth) and \mathllap (zero width)
     // where content extends beyond the nominal box dimensions.
-    // Horizontal: near-zero nominal width gets full expansion; otherwise we still shift when
-    // `min_x < 0` so \mathclap under large operators does not paint off the left edge.
+    // Horizontal: expand only genuinely zero-width roots. Nested zero-width
+    // constructs such as `\mathclap` intentionally keep their overflow outside
+    // the parent advance; the fixed output viewport clips that overflow exactly
+    // like KaTeX's measured element box.
     let (min_x, max_x, min_y, max_y) = compute_visual_bounds(&items);
 
     let mut width = root.width;
@@ -59,10 +61,9 @@ pub fn to_display_list(root: &LayoutBox) -> DisplayList {
         }
     }
 
-    // Expand horizontal dimensions when nominal width is near-zero (e.g. pure \mathllap), or when
-    // ink extends left of x=0. The latter happens for `\sum_{\mathclap{…}}`: the subscript box has
-    // zero advance but negative kerns center the ink, so the first glyph can sit at negative x.
-    // Rasterizers (PNG) clip there; shift right so all items stay in [0, width].
+    // Expand horizontal dimensions when the root itself has near-zero nominal
+    // width (e.g. a standalone \mathllap). For a non-zero parent, preserve
+    // negative child coordinates so nested lap ink is clipped by the viewport.
     if root.width < 0.01 {
         if min_x < -0.001 {
             let extra = -min_x;
@@ -74,12 +75,6 @@ pub fn to_display_list(root: &LayoutBox) -> DisplayList {
         let shifted_max_x = if min_x < -0.001 { max_x - min_x } else { max_x };
         if shifted_max_x > width + 0.001 {
             width = shifted_max_x;
-        }
-    } else if min_x < -0.001 {
-        let extra = -min_x;
-        width = (root.width + extra).max(max_x + extra);
-        for item in &mut items {
-            shift_item_x(item, extra);
         }
     }
 
@@ -203,6 +198,22 @@ fn emit_box(
                     char_code: *char_code,
                     color: lbox.color,
                 });
+            }
+
+            BoxContent::GlyphRun { glyphs } => {
+                for glyph in glyphs {
+                    let font_str = font_str_cache
+                        .entry(glyph.font_id)
+                        .or_insert_with(|| glyph.font_id.as_str().to_string());
+                    items.push(DisplayItem::GlyphPath {
+                        x: x + glyph.x * scale,
+                        y,
+                        scale,
+                        font: font_str.clone(),
+                        char_code: glyph.char_code,
+                        color: lbox.color,
+                    });
+                }
             }
 
             BoxContent::Rule { thickness, raise } => {
@@ -523,9 +534,10 @@ fn emit_box(
                 col_aligns,
                 row_heights,
                 row_depths,
-                col_gap,
+                col_gaps,
                 offset,
                 content_x_offset,
+                content_x_end_offset: _content_x_end_offset,
                 col_separators,
                 hlines_before_row,
                 rule_thickness,
@@ -580,13 +592,18 @@ fn emit_box(
                 }
 
                 // Draw vertical column separator lines ('|' = solid, ':' = dashed).
-                // Separator at position i has local x = content_x_offset - col_gap/2 + sum(col_widths[..i]) + col_gap * i.
-                let col_gap_half = col_gap / 2.0;
+                // Put a separator at the midpoint of its column boundary gap.
                 for (i, sep) in col_separators.iter().enumerate() {
                     if let Some(is_dashed) = sep {
                         let prefix_w: f64 = col_widths[..i].iter().sum();
-                        let local_x =
-                            content_x_offset - col_gap_half + prefix_w + col_gap * i as f64;
+                        let preceding_gaps: f64 = col_gaps[..i.saturating_sub(1)].iter().sum();
+                        let local_x = if i == 0 {
+                            0.0
+                        } else if i >= col_widths.len() {
+                            *array_inner_width
+                        } else {
+                            content_x_offset + prefix_w + preceding_gaps + col_gaps[i - 1] / 2.0
+                        };
                         let abs_x = x + local_x * scale - line_thickness / 2.0;
                         if *is_dashed {
                             // Dashed vertical line: draw segments (dash=4t, gap=4t) top to bottom.
@@ -640,12 +657,12 @@ fn emit_box(
                         });
                         cur_x += cw * scale;
                         if c + 1 < row.len() {
-                            cur_x += col_gap * scale;
+                            cur_x += col_gaps.get(c).copied().unwrap_or(0.0) * scale;
                         }
                     }
                     if *tag_col_width > 0.0 {
                         if let Some(tb) = row_tags.get(r).and_then(|o| o.as_ref()) {
-                            let tag_start_em = array_inner_width - content_x_offset + tag_gap_em;
+                            let tag_start_em = array_inner_width + tag_gap_em;
                             let tag_x =
                                 x + tag_start_em * scale + (tag_col_width - tb.width) * scale;
                             child_actions.push(EmitAction::Box {
@@ -790,9 +807,9 @@ fn emit_box(
             BoxContent::Overline {
                 body,
                 rule_thickness,
+                offset,
             } => {
-                // Rule center is at 2.5 * rule_thickness above the body's top
-                let rule_center_y = y - (body.height + 2.5 * rule_thickness) * scale;
+                let rule_center_y = y - (body.height + offset) * scale;
                 pending.push(EmitAction::Item(DisplayItem::Line {
                     x,
                     y: rule_center_y,

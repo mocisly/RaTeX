@@ -94,6 +94,34 @@ mod core_parsing {
     }
 
     #[test]
+    fn dots_selects_low_dots_before_comma() {
+        let ast = parse("x,\\dots,y").unwrap();
+        assert_eq!(ast[2].symbol_text(), Some("\\ldots"));
+        assert!(!matches!(ast[3], ParseNode::Kern { .. }));
+    }
+
+    #[test]
+    fn dots_selects_centered_dots_before_binary_operator() {
+        let ast = parse("x\\dots+y").unwrap();
+        assert_eq!(ast[1].symbol_text(), Some("\\@cdots"));
+    }
+
+    #[test]
+    fn dots_selects_integral_spacing_after_one_expansion() {
+        let ast = parse("\\def\\next{\\int}x\\dots\\next y").unwrap();
+        assert!(matches!(ast[1], ParseNode::Kern { .. }));
+        assert_eq!(ast[2].symbol_text(), Some("\\@cdots"));
+        assert_eq!(ast[3].type_name(), "op");
+    }
+
+    #[test]
+    fn explicit_cdots_adds_thinspace_before_comma() {
+        let ast = parse("x\\cdots,y").unwrap();
+        assert_eq!(ast[1].symbol_text(), Some("\\@cdots"));
+        assert!(matches!(ast[2], ParseNode::Kern { .. }));
+    }
+
+    #[test]
     fn open_paren() {
         let ast = parse("(").unwrap();
         assert_eq!(ast.len(), 1);
@@ -349,6 +377,42 @@ mod operators {
     }
 
     #[test]
+    fn unicode_big_operators_normalize_to_command_forms() {
+        fn op_name(node: &ParseNode) -> Option<&str> {
+            match node {
+                ParseNode::Op {
+                    name,
+                    symbol: true,
+                    limits: true,
+                    ..
+                } => name.as_deref(),
+                _ => None,
+            }
+        }
+
+        for (unicode, command) in [
+            ("∏", "\\prod"),
+            ("∐", "\\coprod"),
+            ("∑", "\\sum"),
+            ("⋀", "\\bigwedge"),
+            ("⋁", "\\bigvee"),
+            ("⋂", "\\bigcap"),
+            ("⋃", "\\bigcup"),
+            ("⨀", "\\bigodot"),
+            ("⨁", "\\bigoplus"),
+            ("⨂", "\\bigotimes"),
+            ("⨄", "\\biguplus"),
+            ("⨆", "\\bigsqcup"),
+        ] {
+            let unicode_ast = parse(unicode).unwrap();
+            let command_ast = parse(command).unwrap();
+
+            assert_eq!(op_name(&unicode_ast[0]), Some(command));
+            assert_eq!(op_name(&command_ast[0]), Some(command));
+        }
+    }
+
+    #[test]
     fn int_symbol() {
         let ast = parse("\\int").unwrap();
         assert_eq!(ast.len(), 1);
@@ -469,6 +533,19 @@ mod accents_and_fonts {
         {
             assert_eq!(label, "\\widehat");
             assert_eq!(*is_stretchy, Some(true));
+        }
+    }
+
+    #[test]
+    fn multidot_accents_have_dedicated_ast_nodes() {
+        for (formula, expected_label) in [("\\dddot{x}", "\\dddot"), ("\\ddddot{x}", "\\ddddot")] {
+            let ast = parse(formula).unwrap();
+            assert_eq!(ast.len(), 1);
+            if let ParseNode::Accent { label, .. } = &ast[0] {
+                assert_eq!(label, expected_label);
+            } else {
+                panic!("expected dedicated accent node for {formula}");
+            }
         }
     }
 
@@ -1185,6 +1262,13 @@ mod recursion_limit {
     #[test]
     fn poc_deep_nesting_does_not_abort() {
         assert_recursion_limit_err(&nested_braces(300));
+    }
+
+    #[test]
+    fn contextual_dots_expansion_depth_is_bounded() {
+        assert!(parse(&r"\dots".repeat(32)).is_ok());
+        assert_recursion_limit_err(&r"\dots".repeat(33));
+        assert_recursion_limit_err(&r"\dots".repeat(300));
     }
 
     #[test]

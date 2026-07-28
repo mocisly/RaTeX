@@ -1241,13 +1241,13 @@ fn katex_image_data(label: &str) -> Option<KatexImageData> {
         // Overbrace/underbrace: KaTeX Size4 glyphs (viewBox 400000×548), same 3-piece horizontal joining as stretchy arrows.
         "overbrace" => Some(KatexImageData {
             paths: &["leftbrace", "midbrace", "rightbrace"],
-            min_width: 0.888,
+            min_width: 1.6,
             vb_height: 548.0,
             align: None,
         }),
         "underbrace" => Some(KatexImageData {
             paths: &["leftbraceunder", "midbraceunder", "rightbraceunder"],
-            min_width: 0.888,
+            min_width: 1.6,
             vb_height: 548.0,
             align: None,
         }),

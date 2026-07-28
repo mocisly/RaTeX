@@ -526,6 +526,34 @@ fn accent_hat_x() {
 }
 
 #[test]
+fn accent_keeps_skew_for_multi_glyph_font_run() {
+    use ratex_layout::layout_box::{BoxContent, LayoutBox};
+
+    fn find_accent_skew(lbox: &LayoutBox) -> Option<f64> {
+        match &lbox.content {
+            BoxContent::Accent { skew, .. } => Some(*skew),
+            BoxContent::HBox(children) => children.iter().find_map(find_accent_skew),
+            BoxContent::Scaled { body, .. } | BoxContent::RaiseBox { body, .. } => {
+                find_accent_skew(body)
+            }
+            _ => None,
+        }
+    }
+
+    let options = LayoutOptions::default();
+    let single = layout(&parse(r"\hat{\mathit{M}}").unwrap(), &options);
+    let run = layout(&parse(r"\hat{\mathit{MM}}").unwrap(), &options);
+    let single_skew = find_accent_skew(&single).expect("single-glyph accent");
+    let run_skew = find_accent_skew(&run).expect("multi-glyph accent");
+
+    assert!(single_skew > 0.0, "test glyph must have a non-zero skew");
+    assert!(
+        (run_skew - single_skew).abs() < f64::EPSILON,
+        "font run lost the final glyph skew: single={single_skew}, run={run_skew}"
+    );
+}
+
+#[test]
 fn accent_bar_a() {
     check("\\bar{a}", 0.78056, 0.0);
 }
@@ -653,8 +681,75 @@ fn text_hello() {
 }
 
 #[test]
+fn continuous_text_and_textrm_use_glyph_runs() {
+    use ratex_layout::layout_box::{BoxContent, LayoutBox};
+
+    fn longest_run(lbox: &LayoutBox) -> usize {
+        match &lbox.content {
+            BoxContent::GlyphRun { glyphs } => glyphs.len(),
+            BoxContent::HBox(children) => children.iter().map(longest_run).max().unwrap_or(0),
+            BoxContent::Scaled { body, .. } | BoxContent::RaiseBox { body, .. } => {
+                longest_run(body)
+            }
+            _ => 0,
+        }
+    }
+
+    for input in [r"\text{hello}", r"\textrm{hello}"] {
+        let lbox = layout(&parse(input).unwrap(), &LayoutOptions::default());
+        assert_eq!(
+            longest_run(&lbox),
+            5,
+            "{input} should be laid out as one five-glyph run"
+        );
+    }
+}
+
+#[test]
+fn inter_glyph_kern_changes_font_run_positions_and_width() {
+    use ratex_layout::layout_box::{BoxContent, LayoutBox};
+
+    fn glyph_positions(lbox: &LayoutBox) -> Option<Vec<f64>> {
+        match &lbox.content {
+            BoxContent::GlyphRun { glyphs } => Some(glyphs.iter().map(|glyph| glyph.x).collect()),
+            BoxContent::HBox(children) => children.iter().find_map(glyph_positions),
+            BoxContent::Scaled { body, .. } | BoxContent::RaiseBox { body, .. } => {
+                glyph_positions(body)
+            }
+            _ => None,
+        }
+    }
+
+    let ast = parse(r"\textrm{ab}").unwrap();
+    let plain = layout(&ast, &LayoutOptions::default());
+    let tracked = layout(&ast, &LayoutOptions::default().with_inter_glyph_kern(0.05));
+    let plain_positions = glyph_positions(&plain).expect("plain glyph run");
+    let tracked_positions = glyph_positions(&tracked).expect("tracked glyph run");
+
+    assert!((tracked.width - plain.width - 0.05).abs() < TOLERANCE);
+    assert!((tracked_positions[1] - plain_positions[1] - 0.05).abs() < TOLERANCE);
+}
+
+#[test]
 fn mathrm_sin() {
     check("\\mathrm{sin}", 0.6679, 0.0);
+}
+
+#[test]
+fn href_does_not_add_fixed_tracking_to_text_run() {
+    let options = LayoutOptions::default();
+    let linked = layout(
+        &parse(r"\href{https://example.com}{\texttt{AaBb123}}").unwrap(),
+        &options,
+    );
+    let plain = layout(&parse(r"\texttt{AaBb123}").unwrap(), &options);
+
+    assert!(
+        (linked.width - plain.width).abs() < TOLERANCE,
+        "href changed text width: linked={:.5}, plain={:.5}",
+        linked.width,
+        plain.width
+    );
 }
 
 /// `\mathrm{mm^{2}}` (e.g. mhchem `\pu{123 mm2}`): base of superscript must stay roman, not math italic.
@@ -666,10 +761,16 @@ fn mathrm_mm_squared_both_m_upright() {
     fn collect_m_fonts(lb: &LayoutBox) -> Vec<FontId> {
         let mut v = Vec::new();
         match &lb.content {
-            BoxContent::Glyph { font_id, char_code } => {
-                if *char_code == 'm' as u32 {
-                    v.push(*font_id);
-                }
+            BoxContent::Glyph { font_id, char_code } if *char_code == 'm' as u32 => {
+                v.push(*font_id);
+            }
+            BoxContent::GlyphRun { glyphs } => {
+                v.extend(
+                    glyphs
+                        .iter()
+                        .filter(|glyph| glyph.char_code == 'm' as u32)
+                        .map(|glyph| glyph.font_id),
+                );
             }
             BoxContent::HBox(children) => {
                 for c in children {
